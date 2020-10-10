@@ -115,6 +115,8 @@ class RestoreCmd(object):
                 "{} {} {}".format(i, tfile.deletion_date, tfile.original_location)
             )
         selected = fzf.prompt(fzf_entries, FZF_OPTS)
+        if selected is None:
+            self.exit(1)
         for selection in selected:
             try:
                 index = int(selection.split()[0])

@@ -1,7 +1,7 @@
 # Copyright (C) 2007-2011 Andrea Francia Trivolzio(PV) Italy
 from __future__ import absolute_import
 
-version='0.20.11.14'
+version='0.20.11.23'
 
 import os
 import logging
@@ -15,30 +15,7 @@ EX_OK    = getattr(os, 'EX_OK'   ,  0)
 EX_USAGE = getattr(os, 'EX_USAGE', 64)
 EX_IOERR = getattr(os, 'EX_IOERR', 74)
 
-from .fs import list_files_in_dir
 import os
-
-class TrashDirectory:
-    def __init__(self, path, volume):
-        self.path      = os.path.normpath(path)
-        self.volume    = volume
-        self.logger    = logger
-        self.info_dir  = os.path.join(self.path, 'info')
-        self.files_dir = os.path.join(self.path, 'files')
-        def warn_non_trashinfo():
-            self.logger.warning("Non .trashinfo file in info dir")
-        self.on_non_trashinfo_found = warn_non_trashinfo
-
-    def all_info_files(self) :
-        'Returns a generator of "Path"s'
-        try :
-            for info_file in list_files_in_dir(self.info_dir):
-                if not os.path.basename(info_file).endswith('.trashinfo') :
-                    self.on_non_trashinfo_found()
-                else :
-                    yield info_file
-        except OSError: # when directory does not exist
-            pass
 
 def backup_file_path_from(trashinfo_file_path):
     trashinfo_basename = os.path.basename(trashinfo_file_path)
@@ -48,33 +25,29 @@ def backup_file_path_from(trashinfo_file_path):
     files_dir = os.path.join(trash_dir, 'files')
     return os.path.join(files_dir, backupfile_basename)
 
-class HomeTrashCan:
-    def __init__(self, environ):
-        self.environ = environ
-    def path_to(self, out):
-        if 'XDG_DATA_HOME' in self.environ:
-            out('%(XDG_DATA_HOME)s/Trash' % self.environ)
-        elif 'HOME' in self.environ:
-            out('%(HOME)s/.local/share/Trash' % self.environ)
+def home_trash_dir_path(environ):
+    if 'XDG_DATA_HOME' in environ:
+        return ['%(XDG_DATA_HOME)s/Trash' % environ]
+    elif 'HOME' in environ:
+        return ['%(HOME)s/.local/share/Trash' % environ]
+    return []
 
-class TrashDirectories:
-    def __init__(self, volume_of, getuid, environ):
-        self.home_trashcan = HomeTrashCan(environ)
-        self.volume_of = volume_of
-        self.getuid = getuid
-    def home_trash_dir(self, out) :
-        self.home_trashcan.path_to(lambda path:
-                out(path, self.volume_of(path)))
-    def volume_trash_dir1(self, volume, out):
-        out(
-            path   = os.path.join(volume, '.Trash/%s' % self.getuid()),
-            volume = volume)
-    def volume_trash_dir2(self, volume, out):
-        out(
-            path   = os.path.join(volume, ".Trash-%s" % self.getuid()),
-            volume = volume)
 
-from .fs import FileSystemReader, contents_of
+def home_trash_dir(environ, volume_of):
+    paths = home_trash_dir_path(environ)
+    for path in paths:
+        yield path, volume_of(path)
+
+
+def volume_trash_dir1(volume, getuid):
+    path = os.path.join(volume, '.Trash/%s' % getuid())
+    yield path, volume
+
+
+def volume_trash_dir2(volume, getuid):
+    path = os.path.join(volume, ".Trash-%s" % getuid())
+    yield path, volume
+
 
 def do_nothing(*argv, **argvk): pass
 class Parser:
@@ -141,7 +114,7 @@ class TrashDirs:
         self.getuid             = getuid
         self.mount_points       = list_volumes
         self.top_trashdir_rules = top_trashdir_rules
-        self.home_trashcan      = HomeTrashCan(environ)
+        self.environ            = environ
         # events
         self.on_trash_dir_found                            = lambda trashdir, volume: None
         self.on_trashdir_skipped_because_parent_not_sticky = lambda trashdir: None
@@ -150,9 +123,9 @@ class TrashDirs:
         self.emit_home_trashcan()
         self._for_each_volume_trashcan()
     def emit_home_trashcan(self):
-        def return_result_with_volume(trashcan_path):
-            self.on_trash_dir_found(trashcan_path, '/')
-        self.home_trashcan.path_to(return_result_with_volume)
+        home_trash_dir_paths = home_trash_dir_path(self.environ)
+        for path in home_trash_dir_paths:
+            self.on_trash_dir_found(path, '/')
     def _for_each_volume_trashcan(self):
         for volume in self.mount_points():
             self.emit_trashcans_for(volume)
@@ -173,7 +146,6 @@ class TrashDirs:
         alt_top_trashdir = os.path.join(volume, '.Trash-%s' % self.getuid())
         self.on_trash_dir_found(alt_top_trashdir, volume)
 
-from datetime import datetime
 
 class Harvester:
     def __init__(self, file_reader):

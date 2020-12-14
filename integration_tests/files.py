@@ -1,23 +1,18 @@
 # Copyright (C) 2011 Andrea Francia Trivolzio(PV) Italy
 
-from nose.tools import assert_equals
+from nose.tools import assert_equal
 from trashcli.fs  import has_sticky_bit
 import os, shutil
 
-def having_file(path):
-    dirname=os.path.dirname(path)
-    if dirname != '': make_dirs(dirname)
-    open(path,'w').close()
-    assert os.path.isfile(path)
-make_empty_file = having_file
+
+def make_empty_file(path):
+    make_file(path, '')
 
 
-def write_file(filename, contents=''):
-    parent = os.path.dirname(os.path.realpath(filename))
-    if not os.path.isdir(parent): os.makedirs(parent)
+def make_file(filename, contents=''):
+    make_parent_for(filename)
     with open(filename, 'w') as f:
         f.write(contents)
-    assert_equals(read_file(filename), contents)
 
 
 def read_file(path):
@@ -29,10 +24,8 @@ def require_empty_dir(path):
     if os.path.exists(path): shutil.rmtree(path)
     make_dirs(path)
     assert os.path.isdir(path)
-    assert_equals([], list(os.listdir(path)))
+    assert_equal([], list(os.listdir(path)))
 
-def having_empty_dir(path):
-    require_empty_dir(path)
 
 def make_dirs(path):
     if not os.path.isdir(path):
@@ -40,7 +33,7 @@ def make_dirs(path):
     assert os.path.isdir(path)
 
 def make_parent_for(path):
-    parent = os.path.dirname(path)
+    parent = os.path.dirname(os.path.realpath(path))
     make_dirs(parent)
 
 def make_sticky_dir(path):
@@ -76,7 +69,7 @@ def ensure_non_sticky_dir(path):
     assert not has_sticky_bit(path)
 
 def make_unreadable_file(path):
-    write_file(path, '')
+    make_file(path, '')
     import os
     os.chmod(path, 0)
     from nose.tools import assert_raises

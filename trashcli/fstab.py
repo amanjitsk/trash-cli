@@ -1,38 +1,26 @@
 import os
 
+
 def volume_of(path) :
-    return Fstab().volume_of(path)
-
-class AbstractFstab(object):
-    def __init__(self, ismount):
-        self.ismount = ismount
-    def volume_of(self, path):
-        volume_of = VolumeOf(ismount=self.ismount)
-        return volume_of(path)
-    def mount_points(self):
-        return self.ismount.mount_points()
-
-class Fstab(AbstractFstab):
-    def __init__(self):
-        AbstractFstab.__init__(self, OsIsMount())
+    func = VolumeOf(os.path.ismount, os.path.abspath)
+    return func(path)
 
 class FakeFstab:
     def __init__(self):
         self.ismount = FakeIsMount()
-        self.volume_of = VolumeOf(ismount = self.ismount)
-        self.volume_of.abspath = os.path.normpath
+        self.volume_of = VolumeOf(self.ismount, os.path.normpath)
 
     def mount_points(self):
         return self.ismount.mount_points()
 
     def volume_of(self, path):
-        volume_of = VolumeOf(ismount=self.ismount)
+        volume_of = VolumeOf(self.ismount, os.path.abspath)
         return volume_of(path)
 
     def add_mount(self, path):
         self.ismount.add_mount(path)
 
-from trashcli.list_mount_points import mount_points as os_mount_points
+from trashcli.list_mount_points import os_mount_points
 class OsIsMount:
     def __call__(self, path):
         return os.path.ismount(path)
@@ -51,19 +39,16 @@ class FakeIsMount:
         if path in self.fakes:
             return True
         return False
-    def mount_points(self):
-        return self.fakes.copy()
 
 class VolumeOf:
-    def __init__(self, ismount):
-        self._ismount = ismount
-        import os
-        self.abspath = os.path.abspath
+    def __init__(self, ismount, abspath):
+        self.ismount = ismount
+        self.abspath = abspath
 
     def __call__(self, path):
         path = self.abspath(path)
         while path != os.path.dirname(path):
-            if self._ismount(path):
+            if self.ismount(path):
                 break
             path = os.path.dirname(path)
         return path

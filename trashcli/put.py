@@ -1,10 +1,9 @@
 import os
 import sys
 
-from .fstab import Fstab
 from .fstab import volume_of
-from .trash import EX_OK, EX_IOERR
-from .trash import TrashDirectories
+from .trash import EX_OK, EX_IOERR, home_trash_dir, volume_trash_dir1, \
+    volume_trash_dir2
 from .trash import backup_file_path_from
 from .trash import logger as trash_logger
 from .trash import version
@@ -251,14 +250,13 @@ Report bugs to https://github.com/andreafrancia/trash-cli/issues""")
             checker = all_is_ok_checker
             trash_dirs.append((path, volume, path_maker, checker))
         else:
-            trash_directories = TrashDirectories(self.volume_of,
-                                                 self.getuid,
-                                                 self.environ)
-            trash_directories.home_trash_dir(add_home_trash)
-            trash_directories.volume_trash_dir1(volume,
-                                                add_top_trash_dir)
-            trash_directories.volume_trash_dir2(volume,
-                                                add_alt_top_trash_dir)
+            for path, dir_volume in home_trash_dir(self.environ,
+                                                   self.volume_of):
+                add_home_trash(path, dir_volume)
+            for path, dir_volume in volume_trash_dir1(volume, self.getuid):
+                add_top_trash_dir(path, dir_volume)
+            for path, dir_volume in volume_trash_dir2(volume, self.getuid):
+                add_alt_top_trash_dir(path, dir_volume)
         return trash_dirs
 
 

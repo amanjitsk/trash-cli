@@ -1,16 +1,18 @@
-# Copyright (C) 2009-2011 Andrea Francia Trivolzio(PV) Italy
+# Copyright (C) 2009-2020 Andrea Francia Trivolzio(PV) Italy
 from trashcli.put import TrashPutCmd
 
 import os
+from os.path import exists as file_exists
 from datetime import datetime
-from nose.tools import istest, assert_equals, assert_not_equals
+from nose.tools import istest, assert_equal, assert_not_equal
 from nose.tools import assert_in
 
-from .files import having_file, require_empty_dir, having_empty_dir
+from .files import make_empty_file, require_empty_dir
 from .files import make_sticky_dir
 from trashcli.fstab import FakeFstab
 from trashcli.fs import remove_file
 from trashcli.put import parent_path, RealFs
+from .asserts import assert_line_in_text
 
 class TestPath:
     def setUp(self):
@@ -20,17 +22,17 @@ class TestPath:
         require_empty_dir('other_dir/dir')
         remove_file('dir')
         os.symlink('other_dir/dir', 'dir')
-        having_file('dir/foo')
-        assert_equals(os.path.join(self.base,'other_dir/dir'),
-                      parent_path('dir/foo'))
+        make_empty_file('dir/foo')
+        assert_equal(os.path.join(self.base, 'other_dir/dir'),
+                     parent_path('dir/foo'))
         remove_file('dir')
         remove_file('other_dir')
     def test2(self):
         require_empty_dir('test-disk/dir')
         remove_file('link-to-non-existent')
         os.symlink('test-disk/non-existent', 'link-to-non-existent')
-        assert_equals(self.base,
-                      parent_path('link-to-non-existent'))
+        assert_equal(self.base,
+                     parent_path('link-to-non-existent'))
         remove_file('link-to-non-existent')
 
     def test3(self):
@@ -39,8 +41,7 @@ class TestPath:
         require_empty_dir('foo')
         require_empty_dir('bar')
         os.symlink('../bar/zap', 'foo/zap')
-        assert_equals(os.path.join(self.base,'foo'),
-                      parent_path('foo/zap'))
+        assert_equal(os.path.join(self.base, 'foo'), parent_path('foo/zap'))
         remove_file('foo')
         remove_file('bar')
 
@@ -50,9 +51,8 @@ class TestPath:
         require_empty_dir('foo')
         require_empty_dir('bar')
         os.symlink('../bar/zap', 'foo/zap')
-        having_file('bar/zap')
-        assert_equals(os.path.join(self.base,'foo'),
-                      parent_path('foo/zap'))
+        make_empty_file('bar/zap')
+        assert_equal(os.path.join(self.base,'foo'), parent_path('foo/zap'))
         remove_file('foo')
         remove_file('bar')
 
@@ -95,12 +95,12 @@ class TrashPutTest:
 @istest
 class when_deleting_an_existing_file(TrashPutTest):
     def setUp2(self):
-        having_file('sandbox/foo')
+        make_empty_file('sandbox/foo')
         self.run_trashput('trash-put', 'sandbox/foo')
 
     @istest
     def it_should_remove_the_file(self):
-        file_should_have_been_deleted('sandbox/foo')
+        assert not file_exists('sandbox/foo')
 
     @istest
     def it_should_remove_it_silently(self):
@@ -113,7 +113,7 @@ class when_deleting_an_existing_file(TrashPutTest):
 @istest
 class when_deleting_an_existing_file_in_verbose_mode(TrashPutTest):
     def setUp2(self):
-        having_file('sandbox/foo')
+        make_empty_file('sandbox/foo')
         self.run_trashput('trash-put', '-v', 'sandbox/foo')
 
     @istest
@@ -123,7 +123,7 @@ class when_deleting_an_existing_file_in_verbose_mode(TrashPutTest):
 
     @istest
     def should_be_succesfull(self):
-        assert_equals(0, self.exit_code)
+        assert_equal(0, self.exit_code)
 
 @istest
 class when_deleting_a_non_existing_file(TrashPutTest):
@@ -132,14 +132,14 @@ class when_deleting_a_non_existing_file(TrashPutTest):
 
     @istest
     def should_be_succesfull(self):
-        assert_not_equals(0, self.exit_code)
+        assert_not_equal(0, self.exit_code)
 
 @istest
 class when_fed_with_dot_arguments(TrashPutTest):
 
     def setUp2(self):
-        having_empty_dir('sandbox/')
-        having_file('other_argument')
+        require_empty_dir('sandbox/')
+        make_empty_file('other_argument')
 
     def test_dot_argument_is_skipped(self):
 
@@ -151,7 +151,7 @@ class when_fed_with_dot_arguments(TrashPutTest):
                 "trash-put: cannot trash directory '.'\n")
 
         # the remaining arguments should be processed
-        assert not exists('other_argument')
+        assert not file_exists('other_argument')
 
     def test_dot_dot_argument_is_skipped(self):
 
@@ -163,7 +163,7 @@ class when_fed_with_dot_arguments(TrashPutTest):
             "trash-put: cannot trash directory '..'\n")
 
         # the remaining arguments should be processed
-        assert not exists('other_argument')
+        assert not file_exists('other_argument')
 
     def test_dot_argument_is_skipped_even_in_subdirs(self):
 
@@ -175,8 +175,8 @@ class when_fed_with_dot_arguments(TrashPutTest):
             "trash-put: cannot trash '.' directory 'sandbox/.'\n")
 
         # the remaining arguments should be processed
-        assert not exists('other_argument')
-        assert exists('sandbox')
+        assert not file_exists('other_argument')
+        assert file_exists('sandbox')
 
     def test_dot_dot_argument_is_skipped_even_in_subdirs(self):
 
@@ -188,21 +188,20 @@ class when_fed_with_dot_arguments(TrashPutTest):
             "trash-put: cannot trash '..' directory 'sandbox/..'\n")
 
         # the remaining arguments should be processed
-        assert not exists('other_argument')
-        assert exists('sandbox')
+        assert not file_exists('other_argument')
+        assert file_exists('sandbox')
 
-from textwrap import dedent
 @istest
 class TestUnsecureTrashDirMessages(TrashPutTest):
     def setUp(self):
         TrashPutTest.setUp(self)
-        having_empty_dir('fake-vol')
+        require_empty_dir('fake-vol')
         self.fstab.add_mount('fake-vol')
-        having_file('fake-vol/foo')
+        make_empty_file('fake-vol/foo')
 
     @istest
     def when_is_unsticky(self):
-        having_empty_dir('fake-vol/.Trash')
+        require_empty_dir('fake-vol/.Trash')
 
         self.run_trashput('trash-put', '-v', 'fake-vol/foo')
 
@@ -212,7 +211,7 @@ class TestUnsecureTrashDirMessages(TrashPutTest):
 
     @istest
     def when_it_is_not_a_dir(self):
-        having_file('fake-vol/.Trash')
+        make_empty_file('fake-vol/.Trash')
 
         self.run_trashput('trash-put', '-v', 'fake-vol/foo')
 
@@ -231,26 +230,3 @@ class TestUnsecureTrashDirMessages(TrashPutTest):
                 'trash-put: found unsecure .Trash dir (should not be a symlink): '
                 'fake-vol/.Trash', self.stderr)
 
-def assert_line_in_text(line, text):
-    assert_in(line, text.splitlines(), dedent('''\
-            Line not found in text
-            Line:
-
-            %s
-
-            Text:
-
-            ---
-            %s---''')
-            %(repr(line), text))
-
-def should_fail(func):
-    from nose.tools import assert_raises
-    with assert_raises(AssertionError):
-        func()
-
-def file_should_have_been_deleted(path):
-    import os
-    assert not os.path.exists('sandbox/foo')
-
-exists = os.path.exists

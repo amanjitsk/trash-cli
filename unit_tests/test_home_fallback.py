@@ -2,7 +2,7 @@ from mock import Mock, call, ANY
 
 from trashcli.fstab import FakeFstab
 from trashcli.put import GlobalTrashCan
-from nose.tools import assert_equals
+from nose.tools import assert_equal
 from datetime import datetime
 import os
 
@@ -32,7 +32,7 @@ class TestHomeFallback:
 
         self.trashcan.trash('sandbox/foo')
 
-        assert_equals([
+        assert_equal([
             call.isdir('.Trash'),
             call.islink('.Trash'),
             call.has_sticky_bit('.Trash'),
@@ -52,7 +52,7 @@ class TestHomeFallback:
 
         self.trashcan.trash('sandbox/foo')
 
-        assert_equals([
+        assert_equal([
             call.isdir('.Trash'),
             call.islink('.Trash'),
             call.has_sticky_bit('.Trash'),
@@ -67,23 +67,4 @@ class TestHomeFallback:
         for vol in volumes:
             fstab.add_mount(vol)
         return fstab.volume_of
-
-from trashcli.trash import TrashDirectories
-from trashcli.restore import AllTrashDirectories
-class TestTrashDirectories:
-    def test_list_all_directories(self):
-        all_trash_directories = AllTrashDirectories(
-                volume_of    = Mock(),
-                getuid       = lambda:123,
-                environ      = {'HOME': '~'},
-                mount_points = ['/', '/mnt'])
-
-        result = all_trash_directories.all_trash_directories()
-        paths = list(map(lambda td: td.path, result))
-
-        assert_equals( ['~/.local/share/Trash',
-                        '/.Trash/123',
-                        '/.Trash-123',
-                        '/mnt/.Trash/123',
-                        '/mnt/.Trash-123'] , paths)
 

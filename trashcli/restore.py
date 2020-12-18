@@ -22,6 +22,20 @@ except ModuleNotFoundError:
     pass
 
 
+class FileSystem:
+    def path_exists(self, path):
+        return os.path.exists(path)
+
+    def mkdirs(self, path):
+        return fs.mkdirs(path)
+
+    def move(self, path, dest):
+        return fs.move(path, dest)
+
+    def remove_file(self, path):
+        return fs.remove_file(path)
+
+
 def main():
     try:  # Python 2
         input23 = raw_input
@@ -36,6 +50,7 @@ def main():
         input=input23,
         trashed_files=trashed_files,
         mount_points=os_mount_points,
+        fs=FileSystem(),
     ).run(sys.argv)
 
 
@@ -114,17 +129,18 @@ class RestoreAskingTheUser(object):
         self.die = die
 
     def restore_asking_the_user(self, trashed_files):
-        index = self.input("What file to restore [0..%d]: " % (len(trashed_files) - 1))
-        if index == "":
+        try:
+            user_input = self.input(
+                "What file to restore [0..%d]: " % (len(trashed_files) - 1)
+            )
+        except KeyboardInterrupt:
+            return self.die("")
+        if user_input == "":
             self.println("Exiting")
         else:
             try:
-                indexes = index.split(",")
-                indexes.sort(reverse=True)  # restore largest index first
+                indexes = parse_indexes(user_input, len(trashed_files))
                 for index in indexes:
-                    index = int(index)
-                    if index < 0 or index >= len(trashed_files):
-                        raise IndexError("Out of range")
                     trashed_file = trashed_files[index]
                     self.restore(trashed_file)
             except (ValueError, IndexError) as e:
@@ -161,13 +177,24 @@ class RestoreFZF(object):
                     self.die("Invalid entry")
 
 
+def parse_indexes(user_input, len_trashed_files):
+    indexes = user_input.split(",")
+    indexes.sort(reverse=True)  # restore largest index first
+    result = []
+    for index in indexes:
+        index = int(index)
+        if index < 0 or index >= len_trashed_files:
+            raise IndexError("Out of range")
+        result.append(index)
+    return result
+
+
 class Restorer(object):
-    def __init__(self, path_exists, fs):
-        self.path_exists = path_exists
+    def __init__(self, fs):
         self.fs = fs
 
     def restore_trashed_file(self, trashed_file):
-        restore(trashed_file, self.path_exists, self.fs)
+        restore(trashed_file, self.fs)
 
 
 class RestoreCmd(object):
@@ -189,7 +216,6 @@ class RestoreCmd(object):
         self.curdir = curdir
         self.version = version
         self.fs = fs
-        self.path_exists = os.path.exists
         self.trashed_files = trashed_files
         self.mount_points = mount_points
 
@@ -240,7 +266,7 @@ class RestoreCmd(object):
         self.exit(1)
 
     def restore(self, trashed_file):
-        restorer = Restorer(self.path_exists, self.fs)
+        restorer = Restorer(self.fs)
         restorer.restore_trashed_file(trashed_file)
 
     def all_files_trashed_from_path(self, path, trash_dir_from_cli):
@@ -341,8 +367,8 @@ class TrashedFile:
         self.original_file = original_file
 
 
-def restore(trashed_file, path_exists, fs):
-    if path_exists(trashed_file.original_location):
+def restore(trashed_file, fs):
+    if fs.path_exists(trashed_file.original_location):
         raise IOError(
             'Refusing to overwrite existing file "%s".'
             % os.path.basename(trashed_file.original_location)

@@ -1,13 +1,13 @@
 import os
 import sys
 
-from .trash import version
-from .fstab import Fstab
-from .trash import TrashDirectory
-from .trash import TrashDirectories
-from .fs import contents_of
+from .list_mount_points import os_mount_points
+from .trash import version, home_trash_dir, volume_trash_dir1, volume_trash_dir2
+from .fstab import volume_of
+from .fs import contents_of, list_files_in_dir
 from .trash import backup_file_path_from
-from . import fs
+from . import fs, trash
+
 
 FZF = False
 FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
@@ -22,17 +22,35 @@ except ModuleNotFoundError:
     pass
 
 
+class FileSystem:
+    def path_exists(self, path):
+        return os.path.exists(path)
+
+    def mkdirs(self, path):
+        return fs.mkdirs(path)
+
+    def move(self, path, dest):
+        return fs.move(path, dest)
+
+    def remove_file(self, path):
+        return fs.remove_file(path)
+
+
 def main():
     try:  # Python 2
         input23 = raw_input
     except:  # Python 3
         input23 = input
+    trash_directories = make_trash_directories()
+    trashed_files = TrashedFiles(trash_directories, TrashDirectory(), contents_of)
     RestoreCmd(
         stdout=sys.stdout,
         stderr=sys.stderr,
-        environ=os.environ,
         exit=sys.exit,
         input=input23,
+        trashed_files=trashed_files,
+        mount_points=os_mount_points,
+        fs=FileSystem(),
     ).run(sys.argv)
 
 
@@ -40,16 +58,157 @@ def getcwd_as_realpath():
     return os.path.realpath(os.curdir)
 
 
+def parse_args(sys_argv, curdir):
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Restores from trash chosen file",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "path",
+        default=curdir,
+        nargs="?",
+        help="Restore files from given path instead of current " "directory",
+    )
+    parser.add_argument(
+        "--sort",
+        choices=["date", "path", "none"],
+        default="date",
+        help="Sort list of restore candidates by given field",
+    )
+    parser.add_argument(
+        "--trash-dir", action="store", dest="trash_dir", help=argparse.SUPPRESS
+    )
+    parser.add_argument("--version", action="store_true", default=False)
+    return parser.parse_args(sys_argv[1:])
+
+
+class TrashedFiles:
+    def __init__(self, trash_directories, trash_directory, contents_of):
+        self.trash_directories = trash_directories
+        self.trash_directory = trash_directory
+        self.contents_of = contents_of
+
+    def all_trashed_files(self, volumes, trash_dir_from_cli):
+        logger = trash.logger
+        for path, volume in self.trash_directories.trash_directories_or_user(
+            volumes, trash_dir_from_cli
+        ):
+            for type, info_file in self.trash_directory.all_info_files(path):
+                if type == "non_trashinfo":
+                    logger.warning("Non .trashinfo file in info dir")
+                elif type == "trashinfo":
+                    try:
+                        trash_info = TrashInfoParser(
+                            self.contents_of(info_file), volume
+                        )
+                        original_location = trash_info.original_location()
+                        deletion_date = trash_info.deletion_date()
+                        backup_file_path = backup_file_path_from(info_file)
+                        trashedfile = TrashedFile(
+                            original_location,
+                            deletion_date,
+                            info_file,
+                            backup_file_path,
+                        )
+                        yield trashedfile
+                    except ValueError:
+                        logger.warning("Non parsable trashinfo file: %s" % info_file)
+                    except IOError as e:
+                        logger.warning(str(e))
+                else:
+                    logger.error("Unexpected file type: %s: %s", type, info_file)
+
+
+class RestoreAskingTheUser(object):
+    def __init__(self, input, println, restore, die):
+        self.input = input
+        self.println = println
+        self.restore = restore
+        self.die = die
+
+    def restore_asking_the_user(self, trashed_files):
+        try:
+            user_input = self.input(
+                "What file to restore [0..%d]: " % (len(trashed_files) - 1)
+            )
+        except KeyboardInterrupt:
+            return self.die("")
+        if user_input == "":
+            self.println("Exiting")
+        else:
+            try:
+                indexes = parse_indexes(user_input, len(trashed_files))
+                for index in indexes:
+                    trashed_file = trashed_files[index]
+                    self.restore(trashed_file)
+            except (ValueError, IndexError) as e:
+                self.die("Invalid entry")
+            except IOError as e:
+                self.die(e)
+
+
+class RestoreFZF(object):
+    def __init__(self, input, println, restore, die):
+        self.input = input
+        self.println = println
+        self.restore = restore
+        self.die = die
+
+    def restore_using_fzf(self, trashed_files):
+        sorted_files = sorted(
+            trashed_files, key=lambda x: x.deletion_date, reverse=True
+        )
+        fzf_entries = []
+        for i, tfile in enumerate(sorted_files):
+            fzf_entries.append(
+                "{} {} {}".format(i, tfile.deletion_date, tfile.original_location)
+            )
+        selected = fzf.prompt(fzf_entries, FZF_OPTS)
+        if selected is None:
+            self.println("Exiting")
+        else:
+            for selection in selected:
+                try:
+                    index = int(selection.split()[0])
+                    self.restore(sorted_files[index])
+                except (ValueError, IndexError):
+                    self.die("Invalid entry")
+
+
+def parse_indexes(user_input, len_trashed_files):
+    indexes = user_input.split(",")
+    indexes.sort(reverse=True)  # restore largest index first
+    result = []
+    for index in indexes:
+        index = int(index)
+        if index < 0 or index >= len_trashed_files:
+            raise IndexError("Out of range")
+        result.append(index)
+    return result
+
+
+class Restorer(object):
+    def __init__(self, fs):
+        self.fs = fs
+
+    def restore_trashed_file(self, trashed_file):
+        restore(trashed_file, self.fs)
+
+
 class RestoreCmd(object):
     def __init__(
         self,
         stdout,
         stderr,
-        environ,
         exit,
         input,
         curdir=getcwd_as_realpath,
         version=version,
+        trashed_files=None,
+        mount_points=None,
+        fs=None
     ):
         self.out = stdout
         self.err = stderr
@@ -58,37 +217,25 @@ class RestoreCmd(object):
         self.curdir = curdir
         self.version = version
         self.fs = fs
-        self.path_exists = os.path.exists
-        self.contents_of = contents_of
-        fstab = Fstab()
-        all_trash_directories = AllTrashDirectories(
-            volume_of=fstab.volume_of,
-            getuid=os.getuid,
-            environ=environ,
-            mount_points=fstab.mount_points(),
-        )
-        self.all_trash_directories2 = all_trash_directories.all_trash_directories
+        self.trashed_files = trashed_files
+        self.mount_points = mount_points
 
     def run(self, argv):
-        if "--version" in argv[1:]:
+        args = parse_args(argv, self.curdir() + os.path.sep)
+        trash_dir_from_cli = args.trash_dir
+        if args.version:
             command = os.path.basename(argv[0])
             self.println("%s %s" % (command, self.version))
             return
-        if len(argv) == 2:
-            specific_path = argv[1]
-
-            def is_trashed_from_curdir(trashedfile):
-                return trashedfile.original_location.startswith(specific_path)
-
-            filter = is_trashed_from_curdir
-        else:
-            dir = self.curdir()
-
-            def is_trashed_from_curdir(trashedfile):
-                return trashedfile.original_location.startswith(dir + os.path.sep)
-
-            filter = is_trashed_from_curdir
-        trashed_files = self.all_trashed_files_filter(filter)
+        trashed_files = list(
+            self.all_files_trashed_from_path(args.path, trash_dir_from_cli)
+        )
+        if args.sort == "path":
+            trashed_files = sorted(
+                trashed_files, key=lambda x: x.original_location + str(x.deletion_date)
+            )
+        elif args.sort == "date":
+            trashed_files = sorted(trashed_files, key=lambda x: x.deletion_date)
         self.handle_trashed_files(trashed_files)
 
     def handle_trashed_files(self, trashed_files):
@@ -106,73 +253,32 @@ class RestoreCmd(object):
                 self.restore_asking_the_user(trashed_files)
 
     def restore_using_fzf(self, trashed_files):
-        sorted_files = sorted(
-            trashed_files, key=lambda x: x.deletion_date, reverse=True
-        )
-        fzf_entries = []
-        for i, tfile in enumerate(sorted_files):
-            fzf_entries.append(
-                "{} {} {}".format(i, tfile.deletion_date, tfile.original_location)
-            )
-        selected = fzf.prompt(fzf_entries, FZF_OPTS)
-        if selected is None:
-            self.exit(1)
-        for selection in selected:
-            try:
-                index = int(selection.split()[0])
-                self.restore(sorted_files[index])
-            except (ValueError, IndexError):
-                self.printerr("Invalid entry")
-                self.exit(1)
+        restore_fzf = RestoreFZF(self.input, self.println, self.restore, self.die)
+        restore_fzf.restore_using_fzf(trashed_files)
 
     def restore_asking_the_user(self, trashed_files):
-        index = self.input("What file to restore [0..%d]: " % (len(trashed_files) - 1))
-        if index == "":
-            self.println("Exiting")
-        else:
-            try:
-                index = int(index)
-                if index < 0 or index >= len(trashed_files):
-                    raise IndexError("Out of range")
-                trashed_file = trashed_files[index]
-                self.restore(trashed_file)
-            except (ValueError, IndexError) as e:
-                self.printerr("Invalid entry")
-                self.exit(1)
-            except IOError as e:
-                self.printerr(e)
-                self.exit(1)
+        restore_asking_the_user = RestoreAskingTheUser(
+            self.input, self.println, self.restore, self.die
+        )
+        restore_asking_the_user.restore_asking_the_user(trashed_files)
+
+    def die(self, error):
+        self.printerr(error)
+        self.exit(1)
 
     def restore(self, trashed_file):
-        restore(trashed_file, self.path_exists, self.fs)
+        restorer = Restorer(self.fs)
+        restorer.restore_trashed_file(trashed_file)
 
-    def all_trashed_files_filter(self, matches):
-        trashed_files = []
-        for trashedfile in self.all_trashed_files():
-            if matches(trashedfile):
-                trashed_files.append(trashedfile)
-        return trashed_files
+    def all_files_trashed_from_path(self, path, trash_dir_from_cli):
+        def is_trashed_from_curdir(trashed_file):
+            return trashed_file.original_location.startswith(path)
 
-    def all_trashed_files(self):
-        for trash_dir in self.all_trash_directories2():
-            for info_file in trash_dir.all_info_files():
-                try:
-                    trash_info = TrashInfoParser(
-                        self.contents_of(info_file), trash_dir.volume
-                    )
-                    original_location = trash_info.original_location()
-                    deletion_date = trash_info.deletion_date()
-                    backup_file_path = backup_file_path_from(info_file)
-                    trashedfile = TrashedFile(
-                        original_location, deletion_date, info_file, backup_file_path
-                    )
-                    yield trashedfile
-                except ValueError:
-                    trash_dir.logger.warning(
-                        "Non parsable trashinfo file: %s" % info_file
-                    )
-                except IOError as e:
-                    trash_dir.logger.warning(str(e))
+        for trashed_file in self.trashed_files.all_trashed_files(
+            self.mount_points(), trash_dir_from_cli
+        ):
+            if is_trashed_from_curdir(trashed_file):
+                yield trashed_file
 
     def report_no_files_found(self):
         self.println("No files trashed from current dir ('%s')" % self.curdir())
@@ -182,6 +288,12 @@ class RestoreCmd(object):
 
     def printerr(self, msg):
         self.err.write("%s\n" % msg)
+
+
+def parse_additional_volumes(volume_from_args):
+    if not volume_from_args:
+        return []
+    return volume_from_args
 
 
 from .trash import parse_path
@@ -201,28 +313,36 @@ class TrashInfoParser:
         return os.path.join(self.volume_path, path)
 
 
-class AllTrashDirectories:
-    def __init__(self, volume_of, getuid, environ, mount_points):
+class TrashDirectories2:
+    def __init__(self, volume_of, trash_directories):
+        self.volume_of = volume_of
+        self.trash_directories = trash_directories
+
+    def trash_directories_or_user(self, volumes, trash_dir_from_cli):
+        if trash_dir_from_cli:
+            return [(trash_dir_from_cli, self.volume_of(trash_dir_from_cli))]
+        return self.trash_directories.all_trash_directories(volumes)
+
+
+def make_trash_directories():
+    trash_directories = TrashDirectories(volume_of, os.getuid, os.environ)
+    return TrashDirectories2(volume_of, trash_directories)
+
+
+class TrashDirectories:
+    def __init__(self, volume_of, getuid, environ):
         self.volume_of = volume_of
         self.getuid = getuid
         self.environ = environ
-        self.mount_points = mount_points
 
-    def all_trash_directories(self):
-        trash_directories = TrashDirectories(
-            volume_of=self.volume_of, getuid=self.getuid, environ=self.environ
-        )
-        collected = []
-
-        def add_trash_dir(path, volume):
-            collected.append(TrashDirectory(path, volume))
-
-        trash_directories.home_trash_dir(add_trash_dir)
-        for volume in self.mount_points:
-            trash_directories.volume_trash_dir1(volume, add_trash_dir)
-            trash_directories.volume_trash_dir2(volume, add_trash_dir)
-
-        return collected
+    def all_trash_directories(self, volumes):
+        for path1, volume1 in home_trash_dir(self.environ, self.volume_of):
+            yield path1, volume1
+        for volume in volumes:
+            for path1, volume1 in volume_trash_dir1(volume, self.getuid):
+                yield path1, volume1
+            for path1, volume1 in volume_trash_dir2(volume, self.getuid):
+                yield path1, volume1
 
 
 class TrashedFile:
@@ -248,8 +368,8 @@ class TrashedFile:
         self.original_file = original_file
 
 
-def restore(trashed_file, path_exists, fs):
-    if path_exists(trashed_file.original_location):
+def restore(trashed_file, fs):
+    if fs.path_exists(trashed_file.original_location):
         raise IOError(
             'Refusing to overwrite existing file "%s".'
             % os.path.basename(trashed_file.original_location)
@@ -260,3 +380,17 @@ def restore(trashed_file, path_exists, fs):
 
     fs.move(trashed_file.original_file, trashed_file.original_location)
     fs.remove_file(trashed_file.info_file)
+
+
+class TrashDirectory:
+    def all_info_files(self, path):
+        norm_path = os.path.normpath(path)
+        info_dir = os.path.join(norm_path, "info")
+        try:
+            for info_file in list_files_in_dir(info_dir):
+                if not os.path.basename(info_file).endswith(".trashinfo"):
+                    yield ("non_trashinfo", info_file)
+                else:
+                    yield ("trashinfo", info_file)
+        except OSError:  # when directory does not exist
+            pass

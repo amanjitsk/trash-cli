@@ -208,6 +208,7 @@ class RestoreCmd(object):
         version=version,
         trashed_files=None,
         mount_points=None,
+        fs=None
     ):
         self.out = stdout
         self.err = stderr

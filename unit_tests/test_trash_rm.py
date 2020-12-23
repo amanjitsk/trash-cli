@@ -1,7 +1,7 @@
 import unittest
 
-from nose.tools import assert_equal
-from unit_tests.tools import assert_items_equal
+import six
+
 from mock import Mock, call
 
 from trashcli.rm import Filter
@@ -15,7 +15,7 @@ class TestTrashRmCmdRun(unittest.TestCase):
         cmd.stderr = StringIO()
         cmd.run([None])
 
-        assert_equal('Usage:\n    trash-rm PATTERN\n\nPlease specify PATTERN\n',
+        assert ('Usage:\n    trash-rm PATTERN\n\nPlease specify PATTERN\n' ==
                      cmd.stderr.getvalue())
 
     def test_without_pattern_argument(self):
@@ -31,7 +31,7 @@ class TestTrashRmCmdRun(unittest.TestCase):
 
         cmd.run([None, None])
 
-        assert_equal('', cmd.stderr.getvalue())
+        assert '' == cmd.stderr.getvalue()
 
 class TestTrashRmCmd(unittest.TestCase):
     def test_a_star_matches_all(self):
@@ -40,10 +40,10 @@ class TestTrashRmCmd(unittest.TestCase):
         self.cmd.delete_if_matches('/foo', 'info/foo')
         self.cmd.delete_if_matches('/bar', 'info/bar')
 
-        assert_items_equal([
+        six.assertCountEqual(self, [
             call('info/foo'),
             call('info/bar'),
-            ], self.delete_trashinfo_and_backup_copy.mock_calls)
+        ], self.delete_trashinfo_and_backup_copy.mock_calls)
 
     def test_basename_matches(self):
 
@@ -51,9 +51,9 @@ class TestTrashRmCmd(unittest.TestCase):
         self.cmd.delete_if_matches('/foo', 'info/foo'),
         self.cmd.delete_if_matches('/bar', 'info/bar')
 
-        assert_items_equal([
+        six.assertCountEqual(self, [
             call('info/foo'),
-            ], self.delete_trashinfo_and_backup_copy.mock_calls)
+        ], self.delete_trashinfo_and_backup_copy.mock_calls)
 
     def test_example_with_star_dot_o(self):
 
@@ -63,19 +63,19 @@ class TestTrashRmCmd(unittest.TestCase):
         self.cmd.delete_if_matches('/foo.o', 'info/foo.o'),
         self.cmd.delete_if_matches('/bar.o', 'info/bar.o')
 
-        assert_items_equal([
+        six.assertCountEqual(self, [
             call('info/foo.o'),
             call('info/bar.o'),
-            ], self.delete_trashinfo_and_backup_copy.mock_calls)
+        ], self.delete_trashinfo_and_backup_copy.mock_calls)
 
     def test_absolute_pattern(self):
         self.cmd.use_pattern('/foo/bar.baz')
         self.cmd.delete_if_matches('/foo/bar.baz', '1'),
         self.cmd.delete_if_matches('/foo/bar', '2'),
 
-        assert_items_equal([
+        six.assertCountEqual(self, [
             call('1'),
-            ], self.delete_trashinfo_and_backup_copy.mock_calls)
+        ], self.delete_trashinfo_and_backup_copy.mock_calls)
 
 
     def setUp(self):

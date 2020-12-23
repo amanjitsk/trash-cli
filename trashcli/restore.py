@@ -8,6 +8,10 @@ from .fs import contents_of, list_files_in_dir
 from .trash import backup_file_path_from
 from . import fs, trash
 
+try:
+    xrange
+except NameError:
+    xrange = range
 
 FZF = False
 FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
@@ -140,13 +144,19 @@ class RestoreAskingTheUser(object):
         else:
             try:
                 indexes = parse_indexes(user_input, len(trashed_files))
-                for index in indexes:
-                    trashed_file = trashed_files[index]
-                    self.restore(trashed_file)
-            except (ValueError, IndexError) as e:
-                self.die("Invalid entry")
-            except IOError as e:
-                self.die(e)
+            except InvalidEntry as e:
+                self.die("Invalid entry: %s" % e)
+            else:
+                try:
+                    for index in indexes:
+                        trashed_file = trashed_files[index]
+                        self.restore(trashed_file)
+                except IOError as e:
+                    self.die(e)
+
+
+class InvalidEntry(Exception):
+    pass
 
 
 class RestoreFZF(object):
@@ -182,9 +192,15 @@ def parse_indexes(user_input, len_trashed_files):
     indexes.sort(reverse=True)  # restore largest index first
     result = []
     for index in indexes:
-        index = int(index)
-        if index < 0 or index >= len_trashed_files:
-            raise IndexError("Out of range")
+        try:
+            index = int(index)
+        except ValueError:
+            raise InvalidEntry("not an index: %s" % index)
+        acceptable_values = xrange(0, len_trashed_files)
+        if index not in acceptable_values:
+            raise InvalidEntry(
+                "out of range %s..%s: %s" %
+                (acceptable_values[0], acceptable_values[-1], index))
         result.append(index)
     return result
 

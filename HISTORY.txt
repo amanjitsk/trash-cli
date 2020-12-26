@@ -1,8 +1,9 @@
-master:
+0.20.12.26:
  - trash-restore learnt --trash-dir option
  - add simplified Chinese README
  - trash-resrtore now uses 'date' as the default sort argument
  - Add to README the installation with apt
+ - trash-restore now support range select
 
 0.20.11.23:
  - switched to psutil for listing volumes

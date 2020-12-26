@@ -49,6 +49,17 @@ Restore a trashed file::
     $ ls foo
     foo
 
+Restore multiple trashed files seperated by ',', also support range::
+
+    $ trash-restore
+    0 2007-08-30 12:36:00 /home/andrea/foo
+    1 2007-08-30 12:39:41 /home/andrea/bar
+    2 2007-08-30 12:39:41 /home/andrea/bar2
+    3 2007-08-30 12:39:41 /home/andrea/foo2
+    What file to restore [0..3]: 0-2, 3
+    $ ls foo bar bar2 foo2
+    foo bar bar2 foo2
+
 Remove all files from the trashcan::
 
     $ trash-empty
@@ -160,7 +171,7 @@ For uninstalling use::
     pip uninstall trash-cli
 
 From package manager
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Debian/Ubuntu (apt)::
 
@@ -182,7 +193,7 @@ Environment setup::
 
     virtualenv env --no-site-packages
     source env/bin/activate
-    pip install -r requirements-dev.txt
+    pip install -r requirements-dev.txt -r requirements.txt
 
 Running tests::
 

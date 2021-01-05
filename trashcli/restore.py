@@ -102,9 +102,9 @@ class FileSystem:
 
 def main():
     try:
-        input23 = raw_input # Python 2
+        input23 = raw_input  # Python 2
     except NameError:
-        input23 = input # Python 3
+        input23 = input  # Python 3
     trash_directories = make_trash_directories()
     trashed_files = TrashedFiles(trash_directories, TrashDirectory(), contents_of)
     RestoreCmd(
@@ -120,6 +120,11 @@ def main():
 
 def getcwd_as_realpath():
     return os.path.realpath(os.curdir)
+
+
+class Command:
+    PrintVersion = "Command.PrintVersion"
+    RunRestore = "Command.RunRestore"
 
 
 def parse_args(sys_argv, curdir):
@@ -145,7 +150,16 @@ def parse_args(sys_argv, curdir):
         "--trash-dir", action="store", dest="trash_dir", help=argparse.SUPPRESS
     )
     parser.add_argument("--version", action="store_true", default=False)
-    return parser.parse_args(sys_argv[1:])
+    parsed = parser.parse_args(sys_argv[1:])
+
+    if parsed.version:
+        return Command.PrintVersion, None
+    else:
+        return Command.RunRestore, {
+            "path": parsed.path,
+            "sort": parsed.sort,
+            "trash_dir": parsed.trash_dir,
+        }
 
 
 class TrashedFiles:
@@ -248,7 +262,7 @@ class RestoreFZF(object):
 
 
 def parse_indexes(user_input, len_trashed_files):
-    indexes = user_input.split(',')
+    indexes = user_input.split(",")
     sequences = []
     for index in indexes:
         if "-" in index:
@@ -265,8 +279,9 @@ def parse_indexes(user_input, len_trashed_files):
     for index in result.all_indexes():
         if index not in acceptable_values:
             raise InvalidEntry(
-                "out of range %s..%s: %s" %
-                (acceptable_values[0], acceptable_values[-1], index))
+                "out of range %s..%s: %s"
+                % (acceptable_values[0], acceptable_values[-1], index)
+            )
     return result
 
 
@@ -296,7 +311,7 @@ class RestoreCmd(object):
         version=version,
         trashed_files=None,
         mount_points=None,
-        fs=None
+        fs=None,
     ):
         self.out = stdout
         self.err = stderr
@@ -309,22 +324,24 @@ class RestoreCmd(object):
         self.mount_points = mount_points
 
     def run(self, argv):
-        args = parse_args(argv, self.curdir() + os.path.sep)
-        trash_dir_from_cli = args.trash_dir
-        if args.version:
+        cmd, args = parse_args(argv, self.curdir() + os.path.sep)
+        if cmd == Command.PrintVersion:
             command = os.path.basename(argv[0])
             self.println("%s %s" % (command, self.version))
             return
-        trashed_files = list(
-            self.all_files_trashed_from_path(args.path, trash_dir_from_cli)
-        )
-        if args.sort == "path":
-            trashed_files = sorted(
-                trashed_files, key=lambda x: x.original_location + str(x.deletion_date)
+        elif cmd == Command.RunRestore:
+            trash_dir_from_cli = args["trash_dir"]
+            trashed_files = list(
+                self.all_files_trashed_from_path(args["path"], trash_dir_from_cli)
             )
-        elif args.sort == "date":
-            trashed_files = sorted(trashed_files, key=lambda x: x.deletion_date)
-        self.handle_trashed_files(trashed_files)
+            if args["sort"] == "path":
+                trashed_files = sorted(
+                    trashed_files,
+                    key=lambda x: x.original_location + str(x.deletion_date),
+                )
+            elif args["sort"] == "date":
+                trashed_files = sorted(trashed_files, key=lambda x: x.deletion_date)
+            self.handle_trashed_files(trashed_files)
 
     def handle_trashed_files(self, trashed_files):
         if not trashed_files:

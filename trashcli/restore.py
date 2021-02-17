@@ -136,7 +136,7 @@ def parse_args(sys_argv, curdir):
     )
     parser.add_argument(
         "path",
-        default=curdir,
+        default="",
         nargs="?",
         help="Restore files from given path instead of current " "directory",
     )
@@ -155,8 +155,9 @@ def parse_args(sys_argv, curdir):
     if parsed.version:
         return Command.PrintVersion, None
     else:
+        path = os.path.normpath(os.path.join(curdir, parsed.path))
         return Command.RunRestore, {
-            "path": parsed.path,
+            "path": path,
             "sort": parsed.sort,
             "trash_dir": parsed.trash_dir,
         }
@@ -300,6 +301,14 @@ class Restorer(object):
         restore(trashed_file, self.fs)
 
 
+def original_location_matches_path(trashed_file_original_location, path):
+    if path == os.path.sep:
+        return True
+    if trashed_file_original_location.startswith(path + os.path.sep):
+        return True
+    return trashed_file_original_location == path
+
+
 class RestoreCmd(object):
     def __init__(
         self,
@@ -376,13 +385,10 @@ class RestoreCmd(object):
         restorer.restore_trashed_file(trashed_file)
 
     def all_files_trashed_from_path(self, path, trash_dir_from_cli):
-        def is_trashed_from_curdir(trashed_file):
-            return trashed_file.original_location.startswith(path)
-
         for trashed_file in self.trashed_files.all_trashed_files(
             self.mount_points(), trash_dir_from_cli
         ):
-            if is_trashed_from_curdir(trashed_file):
+            if original_location_matches_path(trashed_file.original_location, path):
                 yield trashed_file
 
     def report_no_files_found(self):

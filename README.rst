@@ -49,7 +49,7 @@ Restore a trashed file::
     $ ls foo
     foo
 
-Restore multiple trashed files seperated by ',', also support range::
+Restore multiple trashed files separated by ',', also support range::
 
     $ trash-restore
     0 2007-08-30 12:36:00 /home/andrea/foo
@@ -141,11 +141,17 @@ The easy way
 Requirements:
 
  - Python 3 (Python 2.7 may work)
- - pip (use `apt-get install python-pip` on Debian)
+ - pip (use `apt-get install python-pip` on Debian,
+   use `apt install python3-pip` on Ubuntu)
 
 Installation command::
  
     pip install trash-cli
+
+Note: you may want add ~/.local/bin to the PATH:
+
+    echo 'export PATH="$PATH":~/.local/bin' >> ~/.bashrc
+    source ~/.bashrc # reload .bashrc
 
 From sources
 ~~~~~~~~~~~~
@@ -197,14 +203,9 @@ Environment setup::
 
 Running tests::
 
-    pytest unit_tests           # run only unit tests
-    pytest integration_tests    # run all integration tests
+    pytest -m 'not slow'        # run only fast tests
+    pytest -m 'slow'            # run slow tests
     pytest                      # run all tests
-
-Check the installation process before release::
-
-    python check_release_installation.py
-
 
 .. |Donate| image:: https://www.paypalobjects.com/en_GB/i/btn/btn_donate_SM.gif
 .. _Donate: https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=93L6PYT4WBN5A

@@ -106,7 +106,10 @@ def main():
     except NameError:
         input23 = input  # Python 3
     trash_directories = make_trash_directories()
-    trashed_files = TrashedFiles(trash_directories, TrashDirectory(), contents_of)
+    logger = trash.logger
+    trashed_files = TrashedFiles(
+        logger, trash_directories, TrashDirectory(), contents_of
+    )
     RestoreCmd(
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -164,19 +167,19 @@ def parse_args(sys_argv, curdir):
 
 
 class TrashedFiles:
-    def __init__(self, trash_directories, trash_directory, contents_of):
+    def __init__(self, logger, trash_directories, trash_directory, contents_of):
+        self.logger = logger
         self.trash_directories = trash_directories
         self.trash_directory = trash_directory
         self.contents_of = contents_of
 
     def all_trashed_files(self, volumes, trash_dir_from_cli):
-        logger = trash.logger
         for path, volume in self.trash_directories.trash_directories_or_user(
             volumes, trash_dir_from_cli
         ):
             for type, info_file in self.trash_directory.all_info_files(path):
                 if type == "non_trashinfo":
-                    logger.warning("Non .trashinfo file in info dir")
+                    self.logger.warning("Non .trashinfo file in info dir")
                 elif type == "trashinfo":
                     try:
                         trash_info = TrashInfoParser(
@@ -193,11 +196,13 @@ class TrashedFiles:
                         )
                         yield trashedfile
                     except ValueError:
-                        logger.warning("Non parsable trashinfo file: %s" % info_file)
+                        self.logger.warning(
+                            "Non parsable trashinfo file: %s" % info_file
+                        )
                     except IOError as e:
-                        logger.warning(str(e))
+                        self.logger.warning(str(e))
                 else:
-                    logger.error("Unexpected file type: %s: %s", type, info_file)
+                    self.logger.error("Unexpected file type: %s: %s", type, info_file)
 
 
 class RestoreAskingTheUser(object):

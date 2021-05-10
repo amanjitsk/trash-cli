@@ -1,5 +1,5 @@
 from .trash import TopTrashDirRules
-from .trash import TrashDirs
+from .trash import TrashDirsScanner
 from .trash import Harvester
 from .trash import EX_OK
 from .trash import Parser
@@ -59,8 +59,8 @@ class EmptyCmd:
         self.exit_code    = EX_OK
 
         parse = Parser()
-        parse.on_help(PrintHelp(self.description, self.println))
-        parse.on_version(PrintVersion(self.println, self.version))
+        parse.on_help(PrintHelp(self.description, self.out).my_print_help)
+        parse.on_version(PrintVersion(self.out, self.version).print_version)
         parse.on_argument(self.set_max_age_in_days)
         parse.as_default(self.empty_all_trashdirs)
         parse.on_invalid_option(self.report_invalid_option_usage)
@@ -95,13 +95,15 @@ class EmptyCmd:
     def empty_trashdir(self, specific_dir):
         self.delete_all_things_under_trash_dir(specific_dir, None)
     def empty_all_trashdirs(self):
-        trashdirs = TrashDirs(self.environ,
-                              self.getuid,
-                              self.list_volumes,
-                              TopTrashDirRules(self.file_reader))
-        trashdirs.on_trash_dir_found = self.delete_all_things_under_trash_dir
+        scanner = TrashDirsScanner(self.environ,
+                                   self.getuid,
+                                   self.list_volumes,
+                                   TopTrashDirRules(self.file_reader))
 
-        trashdirs.list_trashdirs()
+        for event, args in scanner.scan_trash_dirs():
+            if event == TrashDirsScanner.Found:
+                path, volume = args
+                self.delete_all_things_under_trash_dir(path, volume)
 
     def delete_all_things_under_trash_dir(self, trash_dir_path, volume_path):
         harvester = Harvester(self.file_reader)

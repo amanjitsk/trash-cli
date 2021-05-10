@@ -1,10 +1,12 @@
+import argparse
+import os
+
 from .fs import FileSystemReader
+from .fstab import volume_of
 from .trash import version
 from .trash import TopTrashDirRules
-from .trash import TrashDirs
+from .trash import TrashDirsScanner
 from .trash import Harvester
-from .trash import Parser
-from .trash import PrintHelp
 from .trash import PrintVersion
 from .trash import parse_deletion_date
 from .trash import ParseError
@@ -32,6 +34,7 @@ class ListCmd:
                        file_reader = FileSystemReader(),
                        version     = version):
 
+        self.out          = out
         self.output       = ListCmdOutput(out, err)
         self.err          = self.output.err
         self.environ      = environ
@@ -42,25 +45,36 @@ class ListCmd:
         self.version      = version
 
     def run(self, *argv):
-        parse=Parser()
-        parse.on_help(PrintHelp(self.description, self.output.println))
-        parse.on_version(PrintVersion(self.output.println, self.version))
-        parse.as_default(self.list_trash)
-        parse(argv)
-    def list_trash(self):
+        parser = maker_parser(os.path.basename(argv[0]))
+        parsed = parser.parse_args(argv[1:])
+        if parsed.version:
+            version_printer = PrintVersion(self.out, self.version)
+            version_printer.print_version(argv[0])
+        else:
+            self.list_trash(parsed.trash_dirs)
+
+    def list_trash(self, user_specified_trash_dirs):
         harvester = Harvester(self.file_reader)
         harvester.on_volume = self.output.set_volume_path
         harvester.on_trashinfo_found = self._print_trashinfo
 
-        trashdirs = TrashDirs(self.environ,
-                              self.getuid,
-                              self.list_volumes,
-                              TopTrashDirRules(self.file_reader))
-        trashdirs.on_trashdir_skipped_because_parent_not_sticky = self.output.top_trashdir_skipped_because_parent_not_sticky
-        trashdirs.on_trashdir_skipped_because_parent_is_symlink = self.output.top_trashdir_skipped_because_parent_is_symlink
-        trashdirs.on_trash_dir_found = harvester.analize_trash_directory
+        trashdirs_scanner = TrashDirsScanner(self.environ,
+                                             self.getuid,
+                                             self.list_volumes,
+                                             TopTrashDirRules(self.file_reader))
+        trash_dirs = decide_trash_dirs(user_specified_trash_dirs,
+                                       trashdirs_scanner.scan_trash_dirs())
+        for event, args in trash_dirs:
+            if event == TrashDirsScanner.Found:
+                path, volume = args
+                harvester.analize_trash_directory(path, volume)
+            elif event == TrashDirsScanner.SkippedBecauseParentNotSticky:
+                path, = args
+                self.output.top_trashdir_skipped_because_parent_not_sticky(path)
+            elif event == TrashDirsScanner.SkippedBecauseParentIsSymlink:
+                path, = args
+                self.output.top_trashdir_skipped_because_parent_is_symlink(path)
 
-        trashdirs.list_trashdirs()
     def _print_trashinfo(self, path):
         try:
             contents = self.contents_of(path)
@@ -74,13 +88,36 @@ class ListCmd:
                 self.output.print_parse_path_error(path)
             else:
                 self.output.print_entry(deletion_date, path)
-    def description(self, program_name, printer):
-        printer.usage('Usage: %s [OPTIONS...]' % program_name)
-        printer.summary('List trashed files')
-        printer.options(
-           "  --version   show program's version number and exit",
-           "  -h, --help  show this help message and exit")
-        printer.bug_reporting()
+
+
+def description(program_name, printer):
+    printer.usage('Usage: %s [OPTIONS...]' % program_name)
+    printer.summary('List trashed files')
+    printer.options(
+       "  --version   show program's version number and exit",
+       "  -h, --help  show this help message and exit")
+    printer.bug_reporting()
+
+
+def decide_trash_dirs(user_specified_dirs,
+                      system_dirs):
+    if not user_specified_dirs:
+        for dir in  system_dirs:
+            yield dir
+    for dir in user_specified_dirs:
+        yield (TrashDirsScanner.Found, (dir, volume_of(dir)))
+
+def maker_parser(prog):
+    parser = argparse.ArgumentParser(prog=prog,
+                                     description='List trashed files',
+                                     epilog='Report bugs to https://github.com/andreafrancia/trash-cli/issues')
+    parser.add_argument('--version', action='store_true', default=False,
+                        help="show program's version number and exit")
+    parser.add_argument('--trash-dir', action='append', default=[],
+                        dest='trash_dirs',
+                        help='specify the trash directory to use')
+    return parser
+
 
 class ListCmdOutput:
     def __init__(self, out, err):

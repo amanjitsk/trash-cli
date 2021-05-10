@@ -21,11 +21,21 @@
 trash-list \- List trashed files.
 
 .SH "SYNOPSIS"
-.B trash-list [OPTIONS]... [PATH]...
+.B trash-list [OPTIONS]...
 
 .SH "DESCRIPTION"
 .PP
 List all the contents of the trashcan.
+
+.SH "OPTIONS"
+.IP "-h, --help"
+Show help message and exit.
+
+.IP "--trash-dir=TRASHDIR"
+Use TRASHDIR as trash folder. Can be used multiple times
+
+.IP "--version"
+Show program's version number and exit.
 
 .SH "EXAMPLES"
 List all trashed files or grep output:
@@ -41,8 +51,7 @@ $ trash-list | grep foo
 .fi
 
 .SH "BUGS"
-Report bugs to https://github.com/andreafrancia/trash-cli/issues or to
-andrea@andreafrancia.it
+Please, report bugs to https://github.com/andreafrancia/trash-cli/issues
 
 .SH "IF YOU WANT SAY THANKS"
 Tweet (to @andreafrancia or #trash-cli) or donate 1, 2 or 5 euros using paypal:

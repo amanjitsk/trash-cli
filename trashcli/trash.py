@@ -1,7 +1,7 @@
 # Copyright (C) 2007-2011 Andrea Francia Trivolzio(PV) Italy
 from __future__ import absolute_import
 
-version='0.20.12.26'
+version='0.21.4.18'
 
 import os
 import logging
@@ -109,42 +109,41 @@ class Parser:
     def as_default(self, default_action):
         self.default_action = default_action
 
-class TrashDirs:
-    def __init__(self, environ, getuid, list_volumes, top_trashdir_rules):
-        self.getuid             = getuid
-        self.mount_points       = list_volumes
-        self.top_trashdir_rules = top_trashdir_rules
-        self.environ            = environ
-        # events
-        self.on_trash_dir_found                            = lambda trashdir, volume: None
-        self.on_trashdir_skipped_because_parent_not_sticky = lambda trashdir: None
-        self.on_trashdir_skipped_because_parent_is_symlink = lambda trashdir: None
-    def list_trashdirs(self):
-        self.emit_home_trashcan()
-        self._for_each_volume_trashcan()
-    def emit_home_trashcan(self):
+
+class MyEnum:
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+
+class TrashDirsScanner:
+    Found = MyEnum('TrashDirsScanner.Found')
+    SkippedBecauseParentNotSticky = MyEnum('TrashDirsScanner.SkippedBecauseParentNotSticky')
+    SkippedBecauseParentIsSymlink = MyEnum('TrashDirsScanner.SkippedBecauseParentIsSymlink')
+
+    def __init__(self, environ, getuid, list_volumes, top_trash_dir_rules):
+        self.getuid = getuid
+        self.mount_points = list_volumes
+        self.top_trash_dir_rules = top_trash_dir_rules
+        self.environ = environ
+
+    def scan_trash_dirs(self):
         home_trash_dir_paths = home_trash_dir_path(self.environ)
         for path in home_trash_dir_paths:
-            self.on_trash_dir_found(path, '/')
-    def _for_each_volume_trashcan(self):
+            yield TrashDirsScanner.Found, (path, '/')
         for volume in self.mount_points():
-            self.emit_trashcans_for(volume)
-    def emit_trashcans_for(self, volume):
-        self.emit_trashcan_1_for(volume)
-        self.emit_trashcan_2_for(volume)
-    def emit_trashcan_1_for(self,volume):
-        top_trashdir_path = os.path.join(volume, '.Trash/%s' % self.getuid())
-        class IsValidOutput:
-            def not_valid_parent_should_not_be_a_symlink(_):
-                self.on_trashdir_skipped_because_parent_is_symlink(top_trashdir_path)
-            def not_valid_parent_should_be_sticky(_):
-                self.on_trashdir_skipped_because_parent_not_sticky(top_trashdir_path)
-            def is_valid(_):
-                self.on_trash_dir_found(top_trashdir_path, volume)
-        self.top_trashdir_rules.valid_to_be_read(top_trashdir_path, IsValidOutput())
-    def emit_trashcan_2_for(self, volume):
-        alt_top_trashdir = os.path.join(volume, '.Trash-%s' % self.getuid())
-        self.on_trash_dir_found(alt_top_trashdir, volume)
+            top_trash_dir_path = os.path.join(volume, '.Trash', str(self.getuid()))
+            result = self.top_trash_dir_rules.valid_to_be_read(top_trash_dir_path)
+            if result == TopTrashDirValidationResult.Valid:
+                yield TrashDirsScanner.Found, (top_trash_dir_path, volume)
+            elif result == TopTrashDirValidationResult.NotValidBecauseIsNotSticky:
+                yield TrashDirsScanner.SkippedBecauseParentNotSticky, (top_trash_dir_path,)
+            elif result == TopTrashDirValidationResult.NotValidBecauseParentIsSymlink:
+                yield TrashDirsScanner.SkippedBecauseParentIsSymlink, (top_trash_dir_path,)
+            alt_top_trash_dir = os.path.join(volume, '.Trash-%s' % self.getuid())
+            yield TrashDirsScanner.Found, (alt_top_trash_dir, volume)
 
 
 class Harvester:
@@ -158,56 +157,78 @@ class Harvester:
         self.on_volume(volume_path)
         trashdir = TrashDir(self.file_reader)
         trashdir.open(trash_dir_path, volume_path)
-        trashdir.each_trashinfo(self.on_trashinfo_found)
-        trashdir.each_orphan(self.on_orphan_found)
+        for trash_info in trashdir.list_trashinfo():
+            self.on_trashinfo_found(trash_info)
+        for orphan in trashdir.list_orphans():
+            self.on_orphan_found(orphan)
+
+
+class HelpPrinter:
+    def __init__(self, out):
+        self.out = out
+
+    def usage(self, usage):
+        self.println(usage)
+        self.println('')
+
+    def summary(self, summary):
+        self.println(summary)
+        self.println('')
+
+    def options(self, *line_describing_option):
+        self.println('Options:')
+        for line in line_describing_option:
+            self.println(line)
+        self.println('')
+
+    def bug_reporting(self):
+        self.println("Report bugs to https://github.com/andreafrancia/trash-cli/issues")
+
+    def println(self, line):
+        println(self.out, line)
+
+def println(out, line):
+    out.write(line + '\n')
 
 class PrintHelp:
-    def __init__(self, description, println):
-        class Printer:
-            def __init__(self, println):
-                self.println = println
-            def usage(self, usage):
-                self.println(usage)
-                self.println('')
-            def summary(self, summary):
-                self.println(summary)
-                self.println('')
-            def options(self, *line_describing_option):
-                self.println('Options:')
-                for line in line_describing_option:
-                    self.println(line)
-                self.println('')
-            def bug_reporting(self):
-                self.println("Report bugs to https://github.com/andreafrancia/trash-cli/issues")
+    def __init__(self, description, out):
         self.description  = description
-        self.printer      = Printer(println)
+        self.printer      = HelpPrinter(out)
 
-    def __call__(self, program_name):
+    def my_print_help(self, program_name):
         self.description(program_name, self.printer)
 
 class PrintVersion:
-    def __init__(self, println, version):
-        self.println      = println
-        self.version      = version
-    def __call__(self, program_name):
-        self.println("%s %s" % (program_name, self.version))
+    def __init__(self, out, version):
+        self.out = out
+        self.version = version
+    def print_version(self, program_name):
+        println(self.out, "%s %s" % (program_name, self.version))
+
+class TopTrashDirValidationResult:
+    class DoesNotExist:
+        pass
+    class NotValidBecauseIsNotSticky:
+        pass
+    class NotValidBecauseParentIsSymlink:
+        pass
+    class Valid:
+        pass
 
 class TopTrashDirRules:
     def __init__(self, fs):
         self.fs = fs
 
-    def valid_to_be_read(self, path, output):
+    def valid_to_be_read(self, path):
         parent_trashdir = os.path.dirname(path)
         if not self.fs.exists(path):
-            return
+            return TopTrashDirValidationResult.DoesNotExist
         if not self.fs.is_sticky_dir(parent_trashdir):
-            output.not_valid_parent_should_be_sticky()
-            return
+            return TopTrashDirValidationResult.NotValidBecauseIsNotSticky
         if self.fs.is_symlink(parent_trashdir):
-            output.not_valid_parent_should_not_be_a_symlink()
-            return
+            return TopTrashDirValidationResult.NotValidBecauseParentIsSymlink
         else:
-            output.is_valid()
+            return TopTrashDirValidationResult.Valid
 
 class Dir:
     def __init__(self, path, entries_if_dir_exists):
@@ -226,17 +247,21 @@ class TrashDir:
         self.volume_path    = volume_path
         self.files_dir      = Dir(self._files_dir(),
                                   self.file_reader.entries_if_dir_exists)
-    def each_orphan(self, action):
+
+    def list_orphans(self):
         for entry in self.files_dir.entries():
             trashinfo_path = self._trashinfo_path_from_file(entry)
             file_path = self.files_dir.full_path(entry)
-            if not self.file_reader.exists(trashinfo_path): action(file_path)
+            if not self.file_reader.exists(trashinfo_path):
+                yield file_path
+
     def _entries_if_dir_exists(self, path):
         return self.file_reader.entries_if_dir_exists(path)
 
-    def each_trashinfo(self, action):
+    def list_trashinfo(self):
         for entry in self._trashinfo_entries():
-            action(os.path.join(self._info_dir(), entry))
+            yield os.path.join(self._info_dir(), entry)
+
     def _info_dir(self):
         return os.path.join(self.trash_dir_path, 'info')
     def _trashinfo_path_from_file(self, file_entry):

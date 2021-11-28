@@ -1,10 +1,9 @@
 # Copyright (C) 2007-2021 Andrea Francia Trivolzio(PV) Italy
 
-from setuptools import setup
-
+import os
 from trashcli.fs import read_file, write_file, make_file_executable
-from trashcli import trash
-from trashcli.scripts import Scripts
+from trashcli import trash, base_dir
+from textwrap import dedent
 
 
 def main():
@@ -29,6 +28,7 @@ def main():
         data_files=[('share/man/man1', ['man/man1/trash-empty.1',
                                         'man/man1/trash-list.1',
                                         'man/man1/trash-restore.1',
+                                        'man/man1/trash.1',
                                         'man/man1/trash-put.1',
                                         'man/man1/trash-rm.1'])],
         install_requires=[
@@ -37,5 +37,34 @@ def main():
     )
 
 
+class Scripts:
+    def __init__(self, write_file, make_file_executable):
+        self.write_file = write_file
+        self.make_file_executable = make_file_executable
+        self.created_scripts = []
+
+    def add_script(self, name, module, main_function):
+        path = script_path_for(name)
+        script_contents = dedent("""\
+            #!/usr/bin/env python
+            from __future__ import absolute_import
+            import sys
+            from %(module)s import %(main_function)s as main
+            sys.exit(main())
+            """) % locals()
+        self.write_file(path, script_contents)
+        self.make_file_executable(path)
+        self.created_scripts.append(script_path_without_base_dir_for(name))
+
+
+def script_path_for(name):
+    return os.path.join(base_dir, script_path_without_base_dir_for(name))
+
+
+def script_path_without_base_dir_for(name):
+    return os.path.join('tests', 'cmds', name)
+
+
 if __name__ == '__main__':
+    from setuptools import setup
     main()

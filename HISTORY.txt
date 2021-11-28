@@ -1,5 +1,34 @@
 master:
+ - trash-empty learnt the -i/--interactive option
+ - trash-empty option --all-users is no longer hidden
+
+0.21.7.24:
+ - fix bug in tests
+
+0.21.7.23:
+ - fix bug in tests (see https://github.com/andreafrancia/trash-cli/issues/210)
+
+0.21.6.30:
+ - `trash-empty --help` now shows only the command basename and not the full
+   path to the command.
+ - Now `trash-empty` honors multiple --trash-dir options
+ - trash-empty learnt the hidden option --print-time and now uses TRASH_DATE
+   environment variable if present
+ - trash-empty learnt the --all-users option
+
+0.21.5.25:
+ - now trash-put honors the -i option (also the --interactive one)
+
+0.21.5.22:
+ - trash-rm: fixed pattern matching for absolute paths, fixes
+   https://github.com/andreafrancia/trash-cli/issues/124
+
+0.21.5.20:
+ - add (hidden and undocumented) --files option to trash-list
+
+0.21.5.11:
  - trash-put also accept -vv for enabling debug prints
+ - add (hidden and undocumented) --size option to trash-list
 
 0.21.4.18:
  - fix bug #166 'trash goes into an infinite loop when trashing files with a long filename'
@@ -41,7 +70,7 @@ master:
 0.17.1.1:
  - Now trash-rm supports full path matching, using a pattern starting with slash '/' Fix #67
  - Fix typo in trash-rm(1) man page
- - Add a reference to trash-rm(1) to all man pges
+ - Add a reference to trash-rm(1) to all man pages
  - Fix inconsistent apostrophes
  - Add support for --trash-dir option to trash-empty
 
@@ -90,7 +119,7 @@ master:
  - Now trash-list checks for $topdir/.Trash having sticky bit and not being a
    symlink and warns when these requirements are not met.
  - Now trash-list handles empty, unreadable or malformed .trashinfo
- - Now `trash-emtpy <days>` skips .trashinfos with invalid DeletionDates
+ - Now `trash-empty <days>` skips .trashinfos with invalid DeletionDates
  - Removed Unipath dependency
  - Switched from googlecode to github
  - Removed tests written in Bash

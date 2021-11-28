@@ -1,93 +1,121 @@
+# Copyright (C) 2011-2021 Andrea Francia Bereguardo(PV) Italy
 import argparse
 import os
 
-from .fs import FileSystemReader
-from .fstab import volume_of
-from .trash import version
+from . import fstab
+from .fs import FileSystemReader, file_size
+from .fstab import volume_of, VolumesListing
+from .trash import (version, TrashDirReader, path_of_backup_copy, print_version,
+                    maybe_parse_deletion_date, trash_dir_found,
+                    trash_dir_skipped_because_parent_is_symlink,
+                    trash_dir_skipped_because_parent_not_sticky, UserInfoProvider)
 from .trash import TopTrashDirRules
 from .trash import TrashDirsScanner
-from .trash import Harvester
-from .trash import PrintVersion
-from .trash import parse_deletion_date
 from .trash import ParseError
 from .trash import parse_path
-from .trash import unknown_date
 
 def main():
     import sys
     import os
     from trashcli.list_mount_points import os_mount_points
     ListCmd(
-        out          = sys.stdout,
-        err          = sys.stderr,
-        environ      = os.environ,
-        getuid       = os.getuid,
-        list_volumes = os_mount_points,
+        out=sys.stdout,
+        err=sys.stderr,
+        environ=os.environ,
+        getuid=os.getuid,
+        volumes_listing=VolumesListing(os_mount_points),
     ).run(*sys.argv)
 
+
 class ListCmd:
-    def __init__(self, out,
-                       err,
-                       environ,
-                       list_volumes,
-                       getuid,
-                       file_reader = FileSystemReader(),
-                       version     = version):
+    def __init__(self,
+                 out,
+                 err,
+                 environ,
+                 volumes_listing,
+                 getuid,
+                 file_reader=FileSystemReader(),
+                 version=version,
+                 volume_of=fstab.volume_of):
 
         self.out          = out
         self.output       = ListCmdOutput(out, err)
         self.err          = self.output.err
-        self.environ      = environ
-        self.list_volumes = list_volumes
-        self.getuid       = getuid
-        self.file_reader  = file_reader
-        self.contents_of  = file_reader.contents_of
         self.version      = version
+        self.file_reader = file_reader
+        user_info_provider = UserInfoProvider(environ, getuid)
+        trashdirs_scanner = TrashDirsScanner(user_info_provider,
+                                             volumes_listing,
+                                             TopTrashDirRules(file_reader))
+        self.selector = TrashDirsSelector(trashdirs_scanner.scan_trash_dirs(environ),
+                                          [],
+                                          volume_of)
 
     def run(self, *argv):
         parser = maker_parser(os.path.basename(argv[0]))
         parsed = parser.parse_args(argv[1:])
         if parsed.version:
-            version_printer = PrintVersion(self.out, self.version)
-            version_printer.print_version(argv[0])
+            print_version(self.out, argv[0], self.version)
         else:
-            self.list_trash(parsed.trash_dirs)
+            extractor = {
+                'deletion_date':DeletionDateExtractor(),
+                'size': SizeExtractor(),
+            }[parsed.attribute_to_print]
+            self.list_trash(parsed.trash_dirs, extractor, parsed.show_files)
 
-    def list_trash(self, user_specified_trash_dirs):
-        harvester = Harvester(self.file_reader)
-        harvester.on_volume = self.output.set_volume_path
-        harvester.on_trashinfo_found = self._print_trashinfo
-
-        trashdirs_scanner = TrashDirsScanner(self.environ,
-                                             self.getuid,
-                                             self.list_volumes,
-                                             TopTrashDirRules(self.file_reader))
-        trash_dirs = decide_trash_dirs(user_specified_trash_dirs,
-                                       trashdirs_scanner.scan_trash_dirs())
+    def list_trash(self, user_specified_trash_dirs, extractor, show_files):
+        trash_dirs = self.selector.select(False,
+                                     user_specified_trash_dirs)
         for event, args in trash_dirs:
-            if event == TrashDirsScanner.Found:
+            if event == trash_dir_found:
                 path, volume = args
-                harvester.analize_trash_directory(path, volume)
-            elif event == TrashDirsScanner.SkippedBecauseParentNotSticky:
+                trash_dir = TrashDirReader(self.file_reader)
+                for trash_info in trash_dir.list_trashinfo(path):
+                    self._print_trashinfo(volume, trash_info, extractor, show_files)
+            elif event == trash_dir_skipped_because_parent_not_sticky:
                 path, = args
                 self.output.top_trashdir_skipped_because_parent_not_sticky(path)
-            elif event == TrashDirsScanner.SkippedBecauseParentIsSymlink:
+            elif event == trash_dir_skipped_because_parent_is_symlink:
                 path, = args
                 self.output.top_trashdir_skipped_because_parent_is_symlink(path)
 
-    def _print_trashinfo(self, path):
+    def _print_trashinfo(self, volume, trashinfo_path, extractor, show_files):
         try:
-            contents = self.contents_of(path)
+            contents = self.file_reader.contents_of(trashinfo_path)
         except IOError as e :
             self.output.print_read_error(e)
         else:
-            deletion_date = parse_deletion_date(contents) or unknown_date()
             try:
-                path = parse_path(contents)
+                relative_location = parse_path(contents)
             except ParseError:
-                self.output.print_parse_path_error(path)
+                self.output.print_parse_path_error(trashinfo_path)
             else:
-                self.output.print_entry(deletion_date, path)
+                attribute = extractor.extract_attribute(trashinfo_path, contents)
+                original_location = os.path.join(volume, relative_location)
+
+                if show_files:
+                    original_file = path_of_backup_copy(trashinfo_path)
+                    line = format_line2(attribute, original_location, original_file)
+                else:
+                    line = format_line(attribute, original_location)
+                self.output.println(line)
+
+
+def format_line(attribute, original_location):
+    return "%s %s" % (attribute, original_location)
+
+def format_line2(attribute, original_location, original_file):
+    return "%s %s -> %s" % (attribute, original_location, original_file)
+
+class DeletionDateExtractor:
+    def extract_attribute(self, _trashinfo_path, contents):
+        return maybe_parse_deletion_date(contents)
+
+
+class SizeExtractor:
+    def extract_attribute(self, trashinfo_path, _contents):
+        backup_copy = path_of_backup_copy(trashinfo_path)
+        return str(file_size(backup_copy))
 
 
 def description(program_name, printer):
@@ -99,13 +127,23 @@ def description(program_name, printer):
     printer.bug_reporting()
 
 
-def decide_trash_dirs(user_specified_dirs,
-                      system_dirs):
-    if not user_specified_dirs:
-        for dir in  system_dirs:
-            yield dir
-    for dir in user_specified_dirs:
-        yield (TrashDirsScanner.Found, (dir, volume_of(dir)))
+class TrashDirsSelector:
+    def __init__(self, current_user_dirs, all_users_dirs, volume_of):
+        self.current_user_dirs = current_user_dirs
+        self.all_users_dirs = all_users_dirs
+        self.volume_of = volume_of
+
+    def select(self, all_users_flag, user_specified_dirs):
+        if all_users_flag:
+            for dir in self.all_users_dirs:
+                yield dir
+        else:
+            if not user_specified_dirs:
+                for dir in self.current_user_dirs:
+                    yield dir
+            for dir in user_specified_dirs:
+                yield trash_dir_found, (dir, self.volume_of(dir))
+
 
 def maker_parser(prog):
     parser = argparse.ArgumentParser(prog=prog,
@@ -116,6 +154,13 @@ def maker_parser(prog):
     parser.add_argument('--trash-dir', action='append', default=[],
                         dest='trash_dirs',
                         help='specify the trash directory to use')
+    parser.add_argument('--size', action='store_const', default='deletion_date',
+                        const='size',
+                        dest='attribute_to_print',
+                        help=argparse.SUPPRESS)
+    parser.add_argument('--files', action='store_true', default=False,
+                        dest='show_files',
+                        help=argparse.SUPPRESS)
     return parser
 
 
@@ -137,9 +182,3 @@ class ListCmdOutput:
     def top_trashdir_skipped_because_parent_is_symlink(self, trashdir):
         self.error("TrashDir skipped because parent is symlink: %s"
                 % trashdir)
-    def set_volume_path(self, volume_path):
-        self.volume_path = volume_path
-    def print_entry(self, maybe_deletion_date, relative_location):
-        import os
-        original_location = os.path.join(self.volume_path, relative_location)
-        self.println("%s %s" %(maybe_deletion_date, original_location))

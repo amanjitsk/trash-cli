@@ -2,10 +2,18 @@ import os
 import sys
 
 from .list_mount_points import os_mount_points
-from .trash import version, home_trash_dir, volume_trash_dir1, volume_trash_dir2
+from .trash import (
+    version,
+    home_trash_dir,
+    volume_trash_dir1,
+    volume_trash_dir2,
+    my_input,
+    print_version,
+    parse_original_location,
+)
 from .fstab import volume_of
 from .fs import contents_of, list_files_in_dir
-from .trash import backup_file_path_from
+from .trash import path_of_backup_copy
 from . import fs, trash
 
 try:
@@ -101,10 +109,6 @@ class FileSystem:
 
 
 def main():
-    try:
-        input23 = raw_input  # Python 2
-    except NameError:
-        input23 = input  # Python 3
     trash_directories = make_trash_directories()
     logger = trash.logger
     trashed_files = TrashedFiles(
@@ -114,7 +118,7 @@ def main():
         stdout=sys.stdout,
         stderr=sys.stderr,
         exit=sys.exit,
-        input=input23,
+        input=my_input,
         trashed_files=trashed_files,
         mount_points=os_mount_points,
         fs=FileSystem(),
@@ -182,12 +186,10 @@ class TrashedFiles:
                     self.logger.warning("Non .trashinfo file in info dir")
                 elif type == "trashinfo":
                     try:
-                        trash_info = TrashInfoParser(
-                            self.contents_of(info_file), volume
-                        )
-                        original_location = trash_info.original_location()
-                        deletion_date = trash_info.deletion_date()
-                        backup_file_path = backup_file_path_from(info_file)
+                        contents = self.contents_of(info_file)
+                        original_location = parse_original_location(contents, volume)
+                        deletion_date = parse_deletion_date(contents)
+                        backup_file_path = path_of_backup_copy(info_file)
                         trashedfile = TrashedFile(
                             original_location,
                             deletion_date,
@@ -341,7 +343,7 @@ class RestoreCmd(object):
         cmd, args = parse_args(argv, self.curdir() + os.path.sep)
         if cmd == Command.PrintVersion:
             command = os.path.basename(argv[0])
-            self.println("%s %s" % (command, self.version))
+            print_version(self.out, command, self.version)
             return
         elif cmd == Command.RunRestore:
             trash_dir_from_cli = args["trash_dir"]
@@ -412,21 +414,7 @@ def parse_additional_volumes(volume_from_args):
     return volume_from_args
 
 
-from .trash import parse_path
 from .trash import parse_deletion_date
-
-
-class TrashInfoParser:
-    def __init__(self, contents, volume_path):
-        self.contents = contents
-        self.volume_path = volume_path
-
-    def deletion_date(self):
-        return parse_deletion_date(self.contents)
-
-    def original_location(self):
-        path = parse_path(self.contents)
-        return os.path.join(self.volume_path, path)
 
 
 class TrashDirectories2:
@@ -474,7 +462,7 @@ class TrashedFile:
                        datetime)
      - info_file : the file that contains information (instance of Path)
      - original_file : the path where the trashed file has been placed after the
-                       trash opeartion (instance of Path)
+                       trash operation (instance of Path)
     """
 
     def __init__(self, original_location, deletion_date, info_file, original_file):

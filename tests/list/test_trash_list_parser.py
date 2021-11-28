@@ -24,6 +24,26 @@ class TestTrashListParser(unittest.TestCase):
 
         assert ['foo'] == parsed.trash_dirs
 
+    def test_size_off(self):
+        parsed = self.parser.parse_args([])
+
+        assert 'deletion_date' == parsed.attribute_to_print
+
+    def test_size_on(self):
+        parsed = self.parser.parse_args(['--size'])
+
+        assert 'size' == parsed.attribute_to_print
+
+    def test_files_off(self):
+        parsed = self.parser.parse_args([])
+
+        assert False == parsed.show_files
+
+    def test_files_on(self):
+        parsed = self.parser.parse_args(['--files'])
+
+        assert True == parsed.show_files
+
 
 class TestPrintHelp(unittest.TestCase):
     def test(self):

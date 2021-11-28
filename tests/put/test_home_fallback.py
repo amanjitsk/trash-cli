@@ -3,7 +3,7 @@ import unittest
 from mock import Mock, call, ANY
 
 from trashcli.fstab import create_fake_volume_of
-from trashcli.put import TrashPutCmd
+from trashcli.put import TrashResult, Trasher, TrashDirectoriesFinder, FileTrasher
 from datetime import datetime
 import os
 
@@ -13,19 +13,17 @@ class TestHomeFallback(unittest.TestCase):
         self.reporter = Mock()
         mount_points = ['/', 'sandbox/other_partition']
         self.fs = Mock()
-        self.trashcan = TrashPutCmd(
-                stdout=None,
-                stderr=None,
-                getuid = lambda: 123,
-                volumes = create_fake_volume_of(mount_points),
-                now = datetime.now,
-                environ = dict(),
-                fs = self.fs,
-                parent_path = os.path.dirname,
-                realpath = lambda x:x)
-        self.trashcan.reporter = self.reporter
-        self.trashcan.logger = Mock()
-        self.trashcan.ignore_missing = False
+        volumes = create_fake_volume_of(mount_points)
+        trash_directories_finder = TrashDirectoriesFinder({},
+                                                          lambda: 123,
+                                                          volumes)
+        self.file_trasher = FileTrasher(self.fs,
+                                        volumes,
+                                        lambda x: x,
+                                        datetime.now,
+                                        trash_directories_finder,
+                                        os.path.dirname)
+        self.logger = Mock()
 
     def test_use_of_top_trash_dir_when_sticky(self):
         self.fs.mock_add_spec(['isdir', 'islink', 'has_sticky_bit',
@@ -35,7 +33,13 @@ class TestHomeFallback(unittest.TestCase):
         self.fs.islink.return_value = False
         self.fs.has_sticky_bit.return_value = True
 
-        self.trashcan.trash('sandbox/foo', False)
+        result = TrashResult(False)
+        self.file_trasher.trash_file('sandbox/foo',
+                                     None,
+                                     None,
+                                     result,
+                                     self.logger,
+                                     self.reporter)
 
         assert self.fs.mock_calls == [
             call.isdir('.Trash'),
@@ -55,7 +59,13 @@ class TestHomeFallback(unittest.TestCase):
         self.fs.islink.return_value = False
         self.fs.has_sticky_bit.return_value = False
 
-        self.trashcan.trash('sandbox/foo', False)
+        result = TrashResult(False)
+        self.file_trasher.trash_file('sandbox/foo',
+                                     None,
+                                     None,
+                                     result,
+                                     self.logger,
+                                     self.reporter)
 
         assert self.fs.mock_calls == [
             call.isdir('.Trash'),

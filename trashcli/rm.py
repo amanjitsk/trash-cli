@@ -1,25 +1,28 @@
+# Copyright (C) 2011-2021 Andrea Francia Bereguardo(PV) Italy
 import fnmatch
 import os, sys
 
-from trashcli.trash import TrashDir, parse_path, ParseError
-from trashcli.trash import TrashDirsScanner
-from trashcli.trash import TopTrashDirRules
+from trashcli.trash import (TrashDirReader, parse_path, ParseError,
+                            TrashDirsScanner, TopTrashDirRules,
+                            UserInfoProvider, trash_dir_found)
 from trashcli.empty import CleanableTrashcan
 from trashcli.fs import FileSystemReader
 from trashcli.fs import FileRemover
+
 
 class RmCmd:
     def __init__(self,
                  environ,
                  getuid,
-                 list_volumes,
+                 volumes_listing,
                  stderr,
                  file_reader):
-        self.environ      = environ
-        self.getuid       = getuid
-        self.list_volumes = list_volumes
-        self.stderr       = stderr
-        self.file_reader  = file_reader
+        self.environ = environ
+        self.getuid = getuid
+        self.volumes_listing = volumes_listing
+        self.stderr = stderr
+        self.file_reader = file_reader
+
     def run(self, argv):
         args = argv[1:]
         self.exit_code = 0
@@ -33,24 +36,25 @@ class RmCmd:
             return
 
         trashcan = CleanableTrashcan(FileRemover())
-        pattern = args[0]
-        cmd = Filter(trashcan.delete_trashinfo_and_backup_copy, pattern)
+        cmd = Filter(args[0])
 
         listing = ListTrashinfos(self.file_reader)
 
-        scanner = TrashDirsScanner(self.environ,
-                                   self.getuid,
-                                   self.list_volumes,
+        user_info_provider = UserInfoProvider(self.environ, self.getuid)
+        scanner = TrashDirsScanner(user_info_provider,
+                                   self.volumes_listing,
                                    TopTrashDirRules(self.file_reader))
 
-        for event, args in scanner.scan_trash_dirs():
-            if event == TrashDirsScanner.Found:
+        for event, args in scanner.scan_trash_dirs(self.environ):
+            if event == trash_dir_found:
                 path, volume = args
                 for type, arg in listing.list_from_volume_trashdir(path, volume):
                     if type == 'unable_to_parse_path':
                         self.unable_to_parse_path(arg)
                     elif type == 'trashed_file':
-                        cmd.delete_if_matches(arg)
+                        original_location, info_file = arg
+                        if cmd.matches(original_location):
+                            trashcan.delete_trashinfo_and_backup_copy(info_file)
 
     def unable_to_parse_path(self, trashinfo):
         self.report_error('{}: unable to parse \'Path\''.format(trashinfo))
@@ -64,30 +68,27 @@ class RmCmd:
 
 def main():
     from trashcli.list_mount_points import os_mount_points
-    cmd = RmCmd(environ        = os.environ
-                , getuid       = os.getuid
-                , list_volumes = os_mount_points
-                , stderr       = sys.stderr
-                , file_reader  = FileSystemReader())
+    from trashcli.fstab import VolumesListing
+    volumes_listing = VolumesListing(os_mount_points)
+    cmd = RmCmd(environ=os.environ
+                , getuid=os.getuid
+                , volumes_listing=volumes_listing
+                , stderr=sys.stderr
+                , file_reader=FileSystemReader())
 
     cmd.run(sys.argv)
 
     return cmd.exit_code
 
+
 class Filter:
-    def __init__(self, delete, pattern):
-        self.delete = delete
+    def __init__(self, pattern):
         self.pattern = pattern
 
-    def delete_if_matches(self, trashed_file):
-        original_location, info_file = trashed_file
-        if self.pattern[0] == '/':
-            if self.pattern == original_location:
-                self.delete(info_file)
-        else:
-            basename = os.path.basename(original_location)
-            if fnmatch.fnmatchcase(basename, self.pattern):
-                self.delete(info_file)
+    def matches(self, original_location):
+        basename = os.path.basename(original_location)
+        subject = original_location if self.pattern[0] == '/' else basename
+        return fnmatch.fnmatchcase(subject, self.pattern)
 
 
 class ListTrashinfos:
@@ -95,9 +96,8 @@ class ListTrashinfos:
         self.file_reader = file_reader
 
     def list_from_volume_trashdir(self, trashdir_path, volume):
-        trashdir = TrashDir(self.file_reader)
-        trashdir.open(trashdir_path, volume)
-        for trashinfo_path in trashdir.list_trashinfo():
+        trashdir = TrashDirReader(self.file_reader)
+        for trashinfo_path in trashdir.list_trashinfo(trashdir_path):
             trashinfo = self.file_reader.contents_of(trashinfo_path)
             try:
                 path = parse_path(trashinfo)

@@ -16,18 +16,19 @@ class TestTrashRmCmdRun(unittest.TestCase):
         cmd.run([None])
 
         assert ('Usage:\n    trash-rm PATTERN\n\nPlease specify PATTERN\n' ==
-                     cmd.stderr.getvalue())
+                cmd.stderr.getvalue())
 
     def test_without_pattern_argument(self):
         from trashcli.rm import RmCmd
-        cmd = RmCmd(None, None, None, None, None)
+        volumes_listing = Mock()
+        cmd = RmCmd(None, None, volumes_listing, None, None)
         cmd.stderr = StringIO()
         cmd.file_reader = Mock([])
-        cmd.file_reader.exists = Mock([], return_value = None)
-        cmd.file_reader.entries_if_dir_exists = Mock([], return_value = [])
+        cmd.file_reader.exists = Mock([], return_value=None)
+        cmd.file_reader.entries_if_dir_exists = Mock([], return_value=[])
         cmd.environ = {}
-        cmd.getuid = lambda : '111'
-        cmd.list_volumes = lambda: ['/vol1']
+        cmd.getuid = lambda: '111'
+        volumes_listing.list_volumes.return_value = ['/vol1']
 
         cmd.run([None, None])
 
@@ -36,49 +37,34 @@ class TestTrashRmCmdRun(unittest.TestCase):
 
 class TestTrashRmCmd(unittest.TestCase):
 
-    def setUp(self):
-        self.deleted = []
-
     def test_a_star_matches_all(self):
-        self.cmd = Filter(self.deleted.append, '*')
+        self.cmd = Filter('*')
 
-        self.cmd.delete_if_matches(('/foo', 'info/foo'))
-        self.cmd.delete_if_matches(('/bar', 'info/bar'))
-
-        six.assertCountEqual(self, [
-            'info/foo',
-            'info/bar',
-        ], self.deleted)
+        assert self.cmd.matches('foo') == True
+        assert self.cmd.matches('bar') == True
 
     def test_basename_matches(self):
-        self.cmd = Filter(self.deleted.append, 'foo')
+        self.cmd = Filter('foo')
 
-        self.cmd.delete_if_matches(('/foo', 'info/foo')),
-        self.cmd.delete_if_matches(('/bar', 'info/bar'))
-
-        six.assertCountEqual(self, [
-            'info/foo',
-        ], self.deleted)
+        assert self.cmd.matches('foo') == True
+        assert self.cmd.matches('bar') == False
 
     def test_example_with_star_dot_o(self):
-        self.cmd = Filter(self.deleted.append, '*.o')
+        self.cmd = Filter('*.o')
 
-        self.cmd.delete_if_matches(('/foo.h', 'info/foo.h')),
-        self.cmd.delete_if_matches(('/foo.c', 'info/foo.c')),
-        self.cmd.delete_if_matches(('/foo.o', 'info/foo.o')),
-        self.cmd.delete_if_matches(('/bar.o', 'info/bar.o'))
-
-        six.assertCountEqual(self, [
-            'info/foo.o',
-            'info/bar.o',
-        ], self.deleted)
+        assert self.cmd.matches('/foo.h') == False
+        assert self.cmd.matches('/foo.c') == False
+        assert self.cmd.matches('/foo.o') == True
+        assert self.cmd.matches('/bar.o') == True
 
     def test_absolute_pattern(self):
-        self.cmd = Filter(self.deleted.append, '/foo/bar.baz')
+        self.cmd = Filter('/foo/bar.baz')
 
-        self.cmd.delete_if_matches(('/foo/bar.baz', '1')),
-        self.cmd.delete_if_matches(('/foo/bar', '2')),
+        assert self.cmd.matches('/foo/bar.baz') == True
+        assert self.cmd.matches('/foo/bar') == False
 
-        six.assertCountEqual(self, [
-            '1',
-        ], self.deleted)
+    def test(self):
+        self.cmd = Filter('/foo/*.baz')
+
+        assert self.cmd.matches('/foo/bar.baz') == True
+        assert self.cmd.matches('/foo/bar.bar') == False

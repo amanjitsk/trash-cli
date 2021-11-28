@@ -4,10 +4,11 @@ import unittest
 import pytest
 
 from trashcli.empty import EmptyCmd
-
+from mock import Mock
 from six import StringIO
 import os
 
+from trashcli.fstab import VolumesListing
 from .files import require_empty_dir, make_dirs, set_sticky_bit, \
     make_unreadable_dir, make_empty_file, make_readable
 from .support import MyPath
@@ -44,17 +45,20 @@ class TestEmptyCmdWithMultipleVolumes(unittest.TestCase):
     def setUp(self):
         self.temp_dir = MyPath.make_temp_dir()
         self.top_dir = self.temp_dir / 'topdir'
+        self.volumes_listing = Mock(spec=VolumesListing)
+        self.volumes_listing.list_volumes.return_value = [self.top_dir]
         require_empty_dir(self.top_dir)
-        self.empty=EmptyCmd(
-                out          = StringIO(),
-                err          = StringIO(),
-                environ      = {},
-                list_volumes = lambda: [self.top_dir],
-                now          = None,
-                file_reader  = FileSystemReader(),
-                getuid       = lambda: 123,
-                file_remover = FileRemover(),
-                version      = None,
+        self.empty = EmptyCmd(
+            out=StringIO(),
+            err=StringIO(),
+            environ={},
+            volumes_listing=self.volumes_listing,
+            now=None,
+            file_reader=FileSystemReader(),
+            getuid=lambda: 123,
+            file_remover=FileRemover(),
+            version=None,
+            volume_of=lambda x: "volume_of %s" % x
         )
 
     def test_it_removes_trashinfos_from_method_1_dir(self):

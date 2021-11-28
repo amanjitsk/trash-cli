@@ -119,7 +119,8 @@ You could alias `rm` to something that will remind you to not use it::
 
     alias rm='echo "This is not the command you are looking for."; false'
 
-Then, if you really want to use `rm`, simply prepend a slash to bypass the alias::
+Then, if you really want to use `rm`, simply prepend a backslash to bypass the
+alias::
 
     \rm file-without-hope
 
@@ -131,6 +132,15 @@ Where the trashed files go?
 File trashed from the home partition will be moved here::
 
     ~/.local/share/Trash/
+
+How to auto delete files older that 30 days?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Run this::
+
+    (crontab -l ; echo "@daily $(which trash-empty) 30") | crontab -
+
+This will update your crontab file with a `trash-empty` command that runs daily
+and removes files older than 30 days. To review your crontab use: `crontab -l`
 
 Installation
 ------------
@@ -148,7 +158,7 @@ Installation command::
  
     pip install trash-cli
 
-Note: you may want add ~/.local/bin to the PATH:
+Note: you may want add ~/.local/bin to the PATH::
 
     echo 'export PATH="$PATH":~/.local/bin' >> ~/.bashrc
     source ~/.bashrc # reload .bashrc

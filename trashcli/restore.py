@@ -221,6 +221,8 @@ class RestoreAskingTheUser(object):
             )
         except KeyboardInterrupt:
             return self.die("")
+        except EOFError:
+            return self.die("")
         if user_input == "":
             self.println("Exiting")
         else:

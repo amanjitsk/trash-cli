@@ -4,7 +4,7 @@ import unittest
 import pytest
 
 from ..fake_trash_dir import FakeTrashDir
-from ..support import MyPath, list_trash_dir
+from ..support import MyPath
 from .. import run_command
 
 
@@ -40,3 +40,6 @@ class TestEmptyEndToEndInteractive(unittest.TestCase):
             'Would empty the following trash directories:\n'
             '    - %s\n'
             'Proceed? (y/n) ' % self.trash_dir, '', 0]
+
+    def tearDown(self):
+        self.tmp_dir.clean_up()

@@ -36,19 +36,6 @@ class FileSystem:
         return fs.remove_file(path)
 
 
-FZF = False
-FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
-    "FZF_MULTI_OPTS", "--multi"
-)
-try:
-    from pyfzf.pyfzf import FzfPrompt
-
-    fzf = FzfPrompt()
-    FZF = True
-except ModuleNotFoundError:
-    pass
-
-
 def main():
     try:  # Python 2
         input23 = raw_input

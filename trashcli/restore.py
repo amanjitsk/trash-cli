@@ -108,6 +108,19 @@ class FileSystem:
         return fs.remove_file(path)
 
 
+FZF = False
+FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
+    "FZF_MULTI_OPTS", "--multi"
+)
+try:
+    from pyfzf.pyfzf import FzfPrompt
+
+    fzf = FzfPrompt()
+    FZF = True
+except ModuleNotFoundError:
+    pass
+
+
 def main():
     trash_directories = make_trash_directories()
     logger = trash.logger
@@ -364,7 +377,7 @@ class RestoreCmd(object):
     def handle_trashed_files(self, trashed_files):
         if not trashed_files:
             self.report_no_files_found()
-        else:
+        else :
             if FZF:
                 self.restore_using_fzf(trashed_files)
             else:

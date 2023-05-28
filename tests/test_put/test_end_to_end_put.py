@@ -10,6 +10,8 @@ import pytest
 
 from ..run_command import normalize_options
 
+from ..run_command import normalize_options
+
 
 @pytest.mark.slow
 class TestEndToEndPut(unittest.TestCase):

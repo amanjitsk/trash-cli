@@ -22,6 +22,19 @@ except ModuleNotFoundError:
     pass
 
 
+FZF = False
+FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
+    "FZF_MULTI_OPTS", "--multi"
+)
+try:
+    from pyfzf.pyfzf import FzfPrompt
+
+    fzf = FzfPrompt()
+    FZF = True
+except ModuleNotFoundError:
+    pass
+
+
 class FileSystem:
     def path_exists(self, path):
         return os.path.exists(path)
@@ -147,6 +160,34 @@ class RestoreAskingTheUser(object):
                 self.die("Invalid entry")
             except IOError as e:
                 self.die(e)
+
+
+class RestoreFZF(object):
+    def __init__(self, input, println, restore, die):
+        self.input = input
+        self.println = println
+        self.restore = restore
+        self.die = die
+
+    def restore_using_fzf(self, trashed_files):
+        sorted_files = sorted(
+            trashed_files, key=lambda x: x.deletion_date, reverse=True
+        )
+        fzf_entries = []
+        for i, tfile in enumerate(sorted_files):
+            fzf_entries.append(
+                "{} {} {}".format(i, tfile.deletion_date, tfile.original_location)
+            )
+        selected = fzf.prompt(fzf_entries, FZF_OPTS)
+        if selected is None:
+            self.println("Exiting")
+        else:
+            for selection in selected:
+                try:
+                    index = int(selection.split()[0])
+                    self.restore(sorted_files[index])
+                except (ValueError, IndexError):
+                    self.die("Invalid entry")
 
 
 class RestoreFZF(object):

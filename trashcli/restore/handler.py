@@ -5,6 +5,7 @@ from typing import TextIO, Callable
 
 from trashcli.restore.file_system import ReadCwd
 from trashcli.restore.restore_asking_the_user import RestoreAskingTheUser
+from trashcli.restore.restore_using_fzf import FZF, RestoreUsingFzf
 from trashcli.restore.restorer import Restorer
 from trashcli.restore.run_restore_action import Handler
 
@@ -32,11 +33,18 @@ class HandlerImpl(Handler):
         if not trashed_files:
             self.report_no_files_found()
         else:
-            for i, trashedfile in enumerate(trashed_files):
-                self.println("%4d %s %s" % (i,
-                                            trashedfile.deletion_date,
-                                            trashedfile.original_location))
-            self.restore_asking_the_user(trashed_files, overwrite)
+            if FZF:
+                self.restore_using_fzf(trashed_files, overwrite)
+            else:
+                for i, trashedfile in enumerate(trashed_files):
+                    self.println("%4d %s %s" % (i,
+                                                trashedfile.deletion_date,
+                                                trashedfile.original_location))
+                self.restore_asking_the_user(trashed_files, overwrite)
+
+    def restore_using_fzf(self, trashed_files, overwrite=False):
+        restore_fzf = RestoreUsingFzf(self.input, self.println, self.restorer, self.die)
+        restore_fzf.restore_using_fzf(trashed_files, overwrite)
 
     def restore_asking_the_user(self, trashed_files, overwrite=False):
         restore_asking_the_user = RestoreAskingTheUser(self.input,

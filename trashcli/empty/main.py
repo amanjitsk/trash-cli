@@ -3,16 +3,21 @@ import os
 import sys
 from datetime import datetime
 
+from trashcli.compat import Protocol
+
 from trashcli import trash
 from trashcli.empty.empty_cmd import EmptyCmd
-from trashcli.fs import FsMethods
-from .delete_according_date import ContentReader
+from trashcli.fs import RealContentsOf, ContentsOf
 from .existing_file_remover import ExistingFileRemover
 from .file_system_dir_reader import FileSystemDirReader
 from .top_trash_dir_rules_file_system_reader import \
-    TopTrashDirRulesFileSystemReader
+    RealTopTrashDirRulesReader
 from ..fstab.volume_listing import RealVolumesListing
-from ..fstab.volumes import RealVolumes
+from ..fstab.volume_of import RealVolumeOf
+
+
+class ContentReader(ContentsOf, Protocol):
+    pass
 
 
 def main():
@@ -21,14 +26,14 @@ def main():
                          err=sys.stderr,
                          volumes_listing=RealVolumesListing(),
                          now=datetime.now,
-                         file_reader=TopTrashDirRulesFileSystemReader(),
+                         file_reader=RealTopTrashDirRulesReader(),
                          file_remover=ExistingFileRemover(),
                          content_reader=FileSystemContentReader(),
                          dir_reader=FileSystemDirReader(),
                          version=trash.version,
-                         volumes=RealVolumes())
+                         volumes=RealVolumeOf())
     return empty_cmd.run_cmd(sys.argv[1:], os.environ, os.getuid())
 
 
-class FileSystemContentReader(ContentReader):
-    contents_of = FsMethods().contents_of
+class FileSystemContentReader(ContentReader, RealContentsOf):
+    pass

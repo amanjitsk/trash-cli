@@ -5,12 +5,11 @@ from mock import Mock
 
 from trashcli.restore.file_system import FakeFileReader
 from trashcli.restore.info_dir_searcher import InfoDirSearcher, FileFound
-from trashcli.restore.trashed_file import TrashedFiles
+from trashcli.restore.trashed_files import TrashedFiles
 
 
 class TestTrashedFiles(unittest.TestCase):
     def setUp(self):
-        self.contents_of = Mock()
         self.file_reader = FakeFileReader()
         self.logger = Mock(spec=[])
         self.searcher = Mock(spec=InfoDirSearcher)

@@ -4,9 +4,13 @@ from mock import Mock
 
 from tests.fake_trash_dir import FakeTrashDir
 from tests.output_collector import OutputCollector
-from tests.support.fake_volumes import volumes_fake
+from tests.support.fake_volume_of import volume_of_stub
+from trashcli.empty.main import FileSystemContentReader
+from trashcli.empty.top_trash_dir_rules_file_system_reader import \
+    RealTopTrashDirRulesReader
 from trashcli.file_system_reader import FileSystemReader
 from trashcli.fstab.volume_listing import VolumesListing
+from trashcli.lib.dir_reader import RealDirReader
 from trashcli.list.main import ListCmd
 
 
@@ -27,6 +31,7 @@ class TrashListUser:
     def run(self, *argv):
         file_reader = FileSystemReader()
         file_reader.list_volumes = lambda: self.volumes
+        dir_reader = file_reader
         volumes_listing = Mock(spec=VolumesListing)
         volumes_listing.list_volumes.return_value = self.volumes
         ListCmd(
@@ -35,8 +40,10 @@ class TrashListUser:
             environ=self.environ,
             volumes_listing=volumes_listing,
             uid=self.fake_uid,
-            volumes=volumes_fake(),
-            file_reader=file_reader,
+            volumes=volume_of_stub(),
+            dir_reader=RealDirReader(),
+            file_reader=RealTopTrashDirRulesReader(),
+            content_reader=FileSystemContentReader(),
             version=self.version
         ).run(argv)
 

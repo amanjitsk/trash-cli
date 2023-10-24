@@ -3,10 +3,13 @@ import os
 import sys
 
 import trashcli.trash
+from trashcli.empty.main import ContentReader
 from trashcli.file_system_reader import FileSystemReader
+from trashcli.fs import RealContentsOf
 from trashcli.fstab.volume_listing import RealVolumesListing
-from trashcli.fstab.volumes import RealVolumes
-from trashcli.fstab.volumes import Volumes
+from trashcli.fstab.volume_of import RealVolumeOf
+from trashcli.fstab.volume_of import VolumeOf
+from trashcli.lib.dir_reader import DirReader, RealDirReader
 from trashcli.lib.print_version import PrintVersionArgs, \
     PrintVersionAction
 from trashcli.list.list_trash_action import ListTrashAction, ListTrashArgs
@@ -20,6 +23,7 @@ from trashcli.list.minor_actions.print_python_executable import \
     PrintPythonExecutable, PrintPythonExecutableArgs
 from trashcli.list.parser import Parser
 from trashcli.list.trash_dir_selector import TrashDirsSelector
+from trashcli.trash_dirs_scanner import TopTrashDirRules
 
 
 def main():
@@ -29,8 +33,10 @@ def main():
         environ=os.environ,
         volumes_listing=RealVolumesListing(),
         uid=os.getuid(),
-        volumes=RealVolumes(),
+        volumes=RealVolumeOf(),
+        dir_reader=RealDirReader(),
         file_reader=FileSystemReader(),
+        content_reader=RealContentsOf(),
         version=trashcli.trash.version
     ).run(sys.argv)
 
@@ -42,14 +48,17 @@ class ListCmd:
                  environ,
                  volumes_listing,
                  uid,
-                 volumes,  # type: Volumes
-                 file_reader,
+                 volumes,  # type: VolumeOf
+                 file_reader, # type: TopTrashDirRules.Reader
+                 dir_reader,  # type: DirReader
+                 content_reader, # type: ContentReader
                  version,
                  ):
         self.out = out
         self.err = err
         self.version = version
-        self.file_reader = file_reader
+        self.dir_reader = dir_reader
+        self.content_reader = content_reader
         self.environ = environ
         self.uid = uid
         self.volumes_listing = volumes_listing
@@ -69,7 +78,8 @@ class ListCmd:
                                                        self.selector,
                                                        self.out,
                                                        self.err,
-                                                       self.file_reader),
+                                                       self.dir_reader,
+                                                       self.content_reader),
                         PrintPythonExecutableArgs: PrintPythonExecutable()}
 
     def run(self, argv):

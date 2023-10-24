@@ -4,14 +4,13 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import os
-from typing import NamedTuple
 
-from trashcli.empty.actions import Action
+import six
+from typing import NamedTuple
 
 
 class PrintVersionArgs(
     NamedTuple('PrintVersionArgs', [
-        ('action', Action),
         ('argv0', str),
     ])):
 
@@ -31,4 +30,4 @@ class PrintVersionAction:
 
 
 def print_version(out, program_name, version):
-    print("%s %s" % (program_name, version), file=out)
+    print("%s %s" % (program_name, six.text_type(version)), file=out)

@@ -1,15 +1,18 @@
 import os
 
+from typing import Union
+
 from tests.test_put.support.fake_fs.directory import Directory, \
     make_inode_for_dir
-from tests.test_put.support.fake_fs.inode import SymLink
 from tests.test_put.support.fake_fs.file import File
+from tests.test_put.support.fake_fs.inode import SymLink
 from tests.test_put.support.format_mode import format_mode
 from tests.test_put.support.my_file_not_found_error import MyFileNotFoundError
+from trashcli.fs import PathExists
 from trashcli.put.fs.fs import Fs
 
 
-class FakeFs(Fs):
+class FakeFs(Fs, PathExists):
     def __init__(self, cwd='/'):
         directory = Directory('/')
         make_inode_for_dir(directory, 0o755)
@@ -34,7 +37,7 @@ class FakeFs(Fs):
         dir = self.find_dir_or_file(dirname)
         dir.add_dir(basename, 0o755, path)
 
-    def find_dir_or_file(self, path):  # type: (str) -> Directory or File
+    def find_dir_or_file(self, path):  # type: (str) -> Union[Directory,File]
         path = os.path.join(self.cwd, path)
         if path == '/':
             return self.root
@@ -44,7 +47,10 @@ class FakeFs(Fs):
                 cur_dir = cur_dir.get_file(component)
             except KeyError:
                 raise MyFileNotFoundError(
-                    "no such file or directory: %s" % path)
+                    "no such file or directory: %s\n%s" % (
+                        path,
+                        "\n".join(self.list_all()),
+                        ))
         return cur_dir
 
     def components_for(self, path):
@@ -195,3 +201,11 @@ class FakeFs(Fs):
     def lexists(self, path):
         # TODO: consider links
         return self.exists(path)
+
+    def list_all(self):
+        result = self.walk_no_follow("/")
+        for top, dirs, non_dirs in result:
+            for d in dirs:
+                yield os.path.join(top, d)
+            for f in non_dirs:
+                yield os.path.join(top, f)

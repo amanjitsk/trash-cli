@@ -1,18 +1,18 @@
 import os
 from datetime import datetime
-from typing import TextIO
+from typing import TextIO, Callable
 
 from trashcli.empty.clock import Clock
 from trashcli.empty.console import Console
-from trashcli.empty.delete_according_date import ContentReader
 from trashcli.empty.empty_action import EmptyAction, EmptyActionArgs
 from trashcli.empty.errors import Errors
 from trashcli.empty.existing_file_remover import ExistingFileRemover
 from trashcli.empty.is_input_interactive import is_input_interactive
 from trashcli.empty.parser import Parser
 from trashcli.empty.print_time_action import PrintTimeAction, PrintTimeArgs
+from trashcli.fs import ContentsOf
 from trashcli.fstab.volume_listing import VolumesListing
-from trashcli.fstab.volumes import Volumes
+from trashcli.fstab.volume_of import VolumeOf
 from trashcli.lib.dir_reader import DirReader
 from trashcli.lib.exit_codes import EX_OK
 from trashcli.lib.print_version import PrintVersionAction, PrintVersionArgs
@@ -25,13 +25,13 @@ class EmptyCmd:
                  out,  # type: TextIO
                  err,  # type: TextIO
                  volumes_listing,  # type: VolumesListing
-                 now,  # type: () -> datetime
+                 now,  # type: Callable[[], datetime]
                  file_reader,  # type: TopTrashDirRules.Reader
                  dir_reader,  # type: DirReader
-                 content_reader,  # type: ContentReader
+                 content_reader,  # type: ContentsOf
                  file_remover,  # type: ExistingFileRemover
                  version,  # type: str
-                 volumes,  # type: Volumes
+                 volumes,  # type: VolumeOf
                  ):
         self.volumes = volumes
         self.file_remover = file_remover

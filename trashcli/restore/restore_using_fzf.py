@@ -14,11 +14,10 @@ except ModuleNotFoundError:
 
 
 class RestoreUsingFzf(object):
-    def __init__(self, input, println, restorer, die):
+    def __init__(self, input, restorer, output):
         self.input = input
-        self.println = println
         self.restorer = restorer
-        self.die = die
+        self.output = output
 
     def restore_using_fzf(self, trashed_files, overwrite=False):
         sorted_files = sorted(
@@ -31,11 +30,11 @@ class RestoreUsingFzf(object):
             )
         selected = fzf.prompt(fzf_entries, FZF_OPTS)
         if selected is None:
-            self.println("Exiting")
+            self.output.println("Exiting")
         else:
             for selection in selected:
                 try:
                     index = int(selection.split()[0])
                     self.restorer.restore_trashed_file(sorted_files[index], overwrite)
                 except IOError as e:
-                    self.die(e)
+                    self.output.die(e)

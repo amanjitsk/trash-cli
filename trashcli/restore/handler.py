@@ -37,14 +37,16 @@ class HandlerImpl(Handler):
                 self.restore_using_fzf(trashed_files, overwrite)
             else:
                 for i, trashed_file in enumerate(trashed_files):
-                    self.println("%4d %s %s" % (i,
+                    self.output.println("%4d %s %s" % (i,
                                                 trashed_file.deletion_date,
                                                 trashed_file.original_location))
                 self.restore_asking_the_user(trashed_files, overwrite)
 
     def restore_using_fzf(self, trashed_files, overwrite=False):
-        restore_fzf = RestoreUsingFzf(self.input, self.println, self.restorer, self.die)
+        my_output = OutputRecorder()
+        restore_fzf = RestoreUsingFzf(self.input, self.restorer, my_output)
         restore_fzf.restore_using_fzf(trashed_files, overwrite)
+        my_output.apply_to(self.output)
 
     def restore_asking_the_user(self, trashed_files, overwrite=False):
         my_output = OutputRecorder()

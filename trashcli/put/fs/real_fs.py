@@ -1,12 +1,53 @@
+import grp
 import os
+import pwd
 import stat
+from typing import NamedTuple
+from typing import Optional
 
 from trashcli import fs
 from trashcli.fs import write_file
+from trashcli.fstab.real_volume_of import RealVolumeOf
 from trashcli.put.fs.fs import Fs
 
 
-class RealFs(Fs):
+class Names:
+    def username(self, uid):  # type: (int) -> Optional[str]
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError as e:
+            return None
+
+    def groupname(self, gid):
+        try:
+            return grp.getgrgid(gid).gr_name
+        except KeyError as e:
+            return None
+
+
+class Stat(NamedTuple('Stat', [
+    ('mode', int),
+    ('uid', int),
+    ('gid', int),
+])):
+    pass
+
+
+class RealFs(RealVolumeOf, Fs):
+
+    def __init__(self):
+        super(RealFs, self).__init__()
+
+    def readlink(self, path):
+        return os.readlink(path)
+
+    def symlink(self, src, dest):  # type: (str, str) -> None
+        os.symlink(src, dest)
+
+    def touch(self, path):  # type: (str) -> None
+        with open(path, 'a'):
+            import os
+            os.utime(path, None)
 
     def atomic_write(self, path, content):
         fs.atomic_write(path, content)
@@ -38,6 +79,16 @@ class RealFs(Fs):
     def makedirs(self, path, mode):
         os.makedirs(path, mode)
 
+    def lstat(self, path):
+        stat = os.lstat(path)
+        return Stat(mode=stat.st_mode, uid=stat.st_uid, gid=stat.st_gid)
+
+    def mkdir(self, path):
+        os.mkdir(path)
+
+    def mkdir_with_mode(self, path, mode):
+        os.mkdir(path, mode)
+
     def move(self, path, dest):
         return fs.move(path, dest)
 
@@ -65,5 +116,11 @@ class RealFs(Fs):
     def listdir(self, path):
         return os.listdir(path)
 
-    def lexists(self, path):
+    def read(self, path):
+        return fs.read_file(path)
+
+    def write_file(self, path, content):
+        return fs.write_file(path, content)
+
+    def lexists(selfs, path):
         return os.path.lexists(path)

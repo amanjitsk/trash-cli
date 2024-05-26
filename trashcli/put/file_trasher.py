@@ -1,66 +1,68 @@
 # Copyright (C) 2007-2023 Andrea Francia Trivolzio(PV) Italy
-from typing import Dict
-
-from trashcli.fstab.volume_of import VolumeOf
-from trashcli.put.fs.parent_realpath import ParentRealpath
+from trashcli.put.fs.fs import Fs
+from trashcli.put.context import Context
+from trashcli.put.core.trash_result import TrashResult
+from trashcli.put.core.trashee import Trashee
+from trashcli.put.fs.parent_realpath import ParentRealpathFs
 from trashcli.put.fs.volume_of_parent import VolumeOfParent
-from trashcli.put.my_logger import MyLogger, LogData
-from trashcli.put.reporter import TrashPutReporter
+from trashcli.put.janitor import Janitor
+from trashcli.put.my_logger import LoggerBackend
+from trashcli.put.my_logger import MyLogger
+from trashcli.put.reporting.trash_put_reporter import TrashPutReporter
 from trashcli.put.trash_directories_finder import TrashDirectoriesFinder
-from trashcli.put.trash_file_in import TrashFileIn
-from trashcli.put.trash_result import TrashResult
-from trashcli.put.trashee import Trashee
 
 
 class FileTrasher:
 
     def __init__(self,
-                 volumes,  # type: VolumeOf
-                 trash_directories_finder,  # type: TrashDirectoriesFinder
-                 parent_realpath,  # type: ParentRealpath
-                 logger,  # type: MyLogger
-                 reporter,  # type: TrashPutReporter
-                 trash_file_in,  # type: TrashFileIn
-                 volume_of_parent,  # type: VolumeOfParent
+                 fs,  # type: Fs
+                 janitor,  # type: Janitor
+                 backend,  # type: LoggerBackend
                  ):  # type: (...) -> None
-        self.volumes = volumes
-        self.trash_directories_finder = trash_directories_finder
-        self.parent_realpath = parent_realpath
-        self.logger = logger
-        self.reporter = reporter
-        self.trash_file_in = trash_file_in
-        self.volume_of_parent = volume_of_parent or volume_of_parent
+        self.trash_directories_finder = TrashDirectoriesFinder(fs)
+        self.parent_realpath_fs = ParentRealpathFs(fs)
+        self.logger = MyLogger(backend)
+        self.reporter = TrashPutReporter(fs)
+        self.janitor = janitor
+        self.volume_of_parent = VolumeOfParent(fs)
 
     def trash_file(self,
                    path,  # type: str
-                   forced_volume,
-                   user_trash_dir,
-                   home_fallback,
-                   result,  # type: TrashResult
-                   environ,  # type: Dict[str, str]
-                   uid,  # type: int
-                   log_data,  # type: LogData
+                   context,  # type: Context
                    ):
-        volume_of_file_to_be_trashed = forced_volume or \
-                                       self.volume_of_parent.volume_of_parent(
-                                           path)
-        file_be_trashed = Trashee(path, volume_of_file_to_be_trashed)
-        candidates = self.trash_directories_finder. \
-            possible_trash_directories_for(volume_of_file_to_be_trashed,
+        volume = self._figure_out_volume(path, context.forced_volume)
+        trashee = Trashee(path, volume)
+        candidates = self._select_candidates(volume, context.user_trash_dir,
+                                             context.environ,
+                                             context.uid, context.home_fallback)
+        failures = []
+        for candidate in candidates:
+            self.logger.log_put(self.reporter.trash_dir_with_volume(candidate),
+                                context.log_data)
+            trashing = self.janitor.trash_file_in(
+                candidate, context.log_data, context.environ, trashee)
+            if trashing.succeeded():
+                self.logger.log_put(
+                    self.reporter.file_has_been_trashed_in_as(path,
+                                                              candidate,
+                                                              context.environ),
+                    context.log_data)
+                return TrashResult.Success
+            else:
+                failures.append((candidate, trashing.reason))
+        self.logger.log_put(self.reporter.unable_to_trash_file(
+            trashee, failures, context.environ), context.log_data)
+        return TrashResult.Failure
+
+    def _figure_out_volume(self, path, default_volume):
+        if default_volume:
+            return default_volume
+        else:
+            return self.volume_of_parent.volume_of_parent(path)
+
+    def _select_candidates(self, volume, user_trash_dir, environ, uid,
+                           home_fallback):
+        return self.trash_directories_finder. \
+            possible_trash_directories_for(volume,
                                            user_trash_dir, environ, uid,
                                            home_fallback)
-        self.reporter.volume_of_file(volume_of_file_to_be_trashed, log_data)
-        file_has_been_trashed = False
-        for candidate in candidates:
-            file_has_been_trashed = file_has_been_trashed or \
-                                    self.trash_file_in.trash_file_in(candidate,
-                                                                     log_data,
-                                                                     environ,
-                                                                     file_be_trashed)
-            if file_has_been_trashed: break
-
-        if not file_has_been_trashed:
-            result = result.mark_unable_to_trash_file()
-            self.reporter.unable_to_trash_file(path, log_data)
-
-        return result

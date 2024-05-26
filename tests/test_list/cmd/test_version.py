@@ -1,14 +1,14 @@
-# Copyright (C) 2011 Andrea Francia Trivolzio(PV) Italy
+# Copyright (C) 2011-2024 Andrea Francia Trivolzio(PV) Italy
 
-from tests.support.asserts import assert_equals_with_unidiff
-from tests.test_list.cmd.setup import Setup
+from tests.test_list.cmd.support.trash_list_user import trash_list_user
+
+user = trash_list_user
 
 
-class TestVersion(Setup):
-    def test_should_output_the_version(self):
-        self.user.set_version('1.2.3')
+class TestVersion:
+    def test_should_output_the_version(self, user):
+        user.set_version('1.2.3')
 
-        self.user.run_trash_list('--version')
+        output = user.run_trash_list('--version')
 
-        assert_equals_with_unidiff('trash-list 1.2.3\n',
-                                   self.user.output())
+        assert output.whole_output() == 'trash-list 1.2.3\n'

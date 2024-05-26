@@ -4,23 +4,38 @@ name: Python test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ "*" ]
   pull_request:
     branches: [ master ]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-
+  run_tests:
+    name: Run Python Tests
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        include:
+          - { os: ubuntu-latest, python_version: '3.4' }
+          - { os: ubuntu-latest, python_version: '3.5' }
+          - { os: ubuntu-latest, python_version: '3.6' }
+          - { os: ubuntu-latest, python_version: '3.7' }
+          - { os: ubuntu-latest, python_version: '3.8' }
+          - { os: ubuntu-latest, python_version: '3.9' }
+          - { os: ubuntu-latest, python_version: '3.10' }
+          - { os: ubuntu-latest, python_version: '3.11' }
+          - { os: ubuntu-latest, python_version: '3.12' }
+          - { os: macos-13, python_version: '3.7' }
+          - { os: macos-latest, python_version: '3.8' }
+          - { os: macos-latest, python_version: '3.9' }
+          - { os: macos-latest, python_version: '3.10' }
+          - { os: macos-latest, python_version: '3.11' }
+          - { os: macos-latest, python_version: '3.12' }
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Upgrade pip
@@ -32,3 +47,18 @@ jobs:
       if: matrix.python-version != '2.7'
     - name: Run tests
       run: python -m pytest
+  sdist:
+    name: Test sdist creation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Test sdist
+      run: scripts/test-sdist

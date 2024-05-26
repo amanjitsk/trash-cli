@@ -1,0 +1,16 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+set -euo pipefail
+set -x
+
+python -m venv .venv
+source .venv/bin/activate
+
+"$SCRIPT_DIR/lib/install-python-requirements"
+"$SCRIPT_DIR/lib/check-python-dep" tox
+
+tox &&
+    scripts/test-sdist &&
+    scripts/check-types
+

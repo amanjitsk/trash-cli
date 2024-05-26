@@ -1,41 +1,61 @@
-from io import StringIO
+from typing import IO
+from typing import List
 
-from typing import IO, Callable, List
-
-
-class LogData:
-    def __init__(self, program_name, verbose):
-        self.program_name = program_name
-        self.verbose = verbose
+from trashcli.compat import Protocol
+from trashcli.put.core.logs import Level
+from trashcli.put.core.logs import LogData
+from trashcli.put.core.logs import LogEntry
 
 
-class MyLogger:
+class LoggerBackend(Protocol):
+    def write_message(self,
+                      log_entry,  # type: LogEntry
+                      log_data,  # type: LogData
+                      ):
+        raise NotImplementedError()
+
+
+class StreamBackend(LoggerBackend):
     def __init__(self,
                  stderr,  # type: IO[str]
                  ):  # type: (...) -> None
         self.stderr = stderr
 
-    def debug(self,
-              message,  # type: str
-              log_data,  # type: LogData
-              ):  # type: (...) -> None
-        if log_data.verbose > 1:
-            self.stderr.write("%s: %s\n" % (log_data.program_name, message))
+    def write_message(self,
+                      log_entry,  # type: LogEntry
+                      log_data,  # type: LogData
+                      ):
+        if is_right_for_level(log_data.verbose, log_entry.level):
+            for message in log_entry.resolve_messages():
+                self.stderr.write("%s: %s\n" % (log_data.program_name, message))
 
-    def debug_func_result(self,
-                          messages_func,  # type: Callable[[], List[str]]
-                          log_data,  # type: LogData
-                          ):
-        if log_data.verbose > 1:
-            for line in messages_func():
-                self.stderr.write("%s: %s\n" % (log_data.program_name, line))
 
-    def info(self,
-             message,  # type: str
-             log_data,  # type: LogData
-             ):  # type: (...) -> None
-        if log_data.verbose > 0:
-            self.stderr.write("%s: %s\n" % (log_data.program_name, message))
+def is_right_for_level(verbose,  # type: int
+                       level,  # type: Level
+                       ):
+    min_level = {
+        Level.WARNING: 0,
+        Level.INFO: 1,
+        Level.DEBUG: 2,
+    }
+    return verbose >= min_level[level]
 
-    def warning2(self, message, program_name):
-        self.stderr.write("%s: %s\n" % (program_name, message))
+
+class MyLogger:
+    def __init__(self,
+                 backend,  # type: LoggerBackend
+                 ):  # type: (...) -> None
+        self.backend = backend
+
+    def log_put(self,
+                entry,  # type: LogEntry
+                log_data,  # type: LogData
+                ):
+        self.backend.write_message(entry, log_data)
+
+    def log_multiple(self,
+                     entries,  # type: List[LogEntry]
+                     log_data,  # type: LogData
+                     ):  # type: (...) -> None
+        for entry in entries:
+            self.log_put(entry, log_data)

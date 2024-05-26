@@ -1,7 +1,14 @@
 import os
 import shutil
 
-from trashcli.fs import write_file, has_sticky_bit, mkdirs
+from trashcli.fs import has_sticky_bit
+from trashcli.fs import mkdirs
+from trashcli.fs import write_file
+
+
+def mkdir_p(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
 
 def make_empty_file(path):
@@ -16,6 +23,15 @@ def make_file(filename, contents=''):
 def require_empty_dir(path):
     if os.path.exists(path): shutil.rmtree(path)
     make_dirs(path)
+    check_empty_dir(path)
+
+
+def make_empty_dir(path):
+    os.mkdir(path)
+    check_empty_dir(path)
+
+
+def check_empty_dir(path):
     assert os.path.isdir(path)
     assert [] == list(os.listdir(path))
 
@@ -87,3 +103,14 @@ def assert_dir_empty(path):
 
 def assert_dir_contains(path, filename):
     assert os.path.exists(os.path.join(path, filename))
+
+
+def does_not_exist(path):
+    assert not os.path.exists(path)
+
+
+def is_a_symlink_to_a_dir(path):
+    dest = "%s-dest" % path
+    os.mkdir(dest)
+    rel_dest = os.path.basename(dest)
+    os.symlink(rel_dest, path)

@@ -1,25 +1,26 @@
 # Copyright (C) 2007-2023 Andrea Francia Trivolzio(PV) Italy
-from typing import Dict, List
+from typing import List
 
 from trashcli.fstab.volume_of import VolumeOf
+from trashcli.lib.environ import Environ
 from trashcli.lib.trash_dirs import (
     volume_trash_dir1, volume_trash_dir2, home_trash_dir)
-from trashcli.put.candidate import Candidate
-from trashcli.put.gate import SameVolumeGate, HomeFallbackGate
-from trashcli.put.path_maker import AbsolutePaths, RelativePaths
-from trashcli.put.security_check import NoCheck, TopTrashDirCheck
+from trashcli.put.core.candidate import Candidate
+from trashcli.put.core.check_type import NoCheck, TopTrashDirCheck
+from trashcli.put.core.path_maker_type import PathMakerType
+from trashcli.put.gate import Gate
 
 
 class TrashDirectoriesFinder:
     def __init__(self,
-                 volumes,  # type: VolumeOf
+                 fs,  # type: VolumeOf
                  ):
-        self.volumes = volumes
+        self.fs = fs
 
     def possible_trash_directories_for(self,
                                        volume,  # type: str
                                        specific_trash_dir,  # type: str
-                                       environ,  # type: Dict[str, str]
+                                       environ,  # type: Environ
                                        uid,  # type: int
                                        home_fallback,  # type: bool
                                        ):  # type: (...) -> List[Candidate]
@@ -29,7 +30,7 @@ class TrashDirectoriesFinder:
             trash_dirs.append(
                 Candidate(trash_dir_path=path,
                           volume=volume,
-                          path_maker_type=AbsolutePaths,
+                          path_maker_type=PathMakerType.AbsolutePaths,
                           check_type=NoCheck,
                           gate=gate))
 
@@ -37,37 +38,35 @@ class TrashDirectoriesFinder:
             trash_dirs.append(
                 Candidate(trash_dir_path=path,
                           volume=volume,
-                          path_maker_type=RelativePaths,
+                          path_maker_type=PathMakerType.RelativePaths,
                           check_type=TopTrashDirCheck,
-                          gate=SameVolumeGate))
+                          gate=Gate.SameVolume))
 
         def add_alt_top_trash_dir(path, volume):
             trash_dirs.append(
                 Candidate(trash_dir_path=path,
                           volume=volume,
-                          path_maker_type=RelativePaths,
+                          path_maker_type=PathMakerType.RelativePaths,
                           check_type=NoCheck,
-                          gate=SameVolumeGate))
+                          gate=Gate.SameVolume))
 
         if specific_trash_dir:
             path = specific_trash_dir
-            volume = self.volumes.volume_of(path)
+            volume = self.fs.volume_of(path)
             trash_dirs.append(
                 Candidate(trash_dir_path=path,
                           volume=volume,
-                          path_maker_type=RelativePaths,
+                          path_maker_type=PathMakerType.RelativePaths,
                           check_type=NoCheck,
-                          gate=SameVolumeGate))
+                          gate=Gate.SameVolume))
         else:
-            for path, dir_volume in home_trash_dir(environ,
-                                                   self.volumes):
-                add_home_trash(path, dir_volume, SameVolumeGate)
+            for path, dir_volume in home_trash_dir(environ, self.fs):
+                add_home_trash(path, dir_volume, Gate.SameVolume)
             for path, dir_volume in volume_trash_dir1(volume, uid):
                 add_top_trash_dir(path, dir_volume)
             for path, dir_volume in volume_trash_dir2(volume, uid):
                 add_alt_top_trash_dir(path, dir_volume)
             if home_fallback:
-                for path, dir_volume in home_trash_dir(environ,
-                                                       self.volumes):
-                    add_home_trash(path, dir_volume, HomeFallbackGate)
+                for path, dir_volume in home_trash_dir(environ, self.fs):
+                    add_home_trash(path, dir_volume, Gate.HomeFallback)
         return trash_dirs

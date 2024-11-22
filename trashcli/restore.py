@@ -22,19 +22,6 @@ except ModuleNotFoundError:
     pass
 
 
-FZF = False
-FZF_OPTS = "--prompt='Select files to restore> ' " + os.environ.get(
-    "FZF_MULTI_OPTS", "--multi"
-)
-try:
-    from pyfzf.pyfzf import FzfPrompt
-
-    fzf = FzfPrompt()
-    FZF = True
-except ModuleNotFoundError:
-    pass
-
-
 class FileSystem:
     def path_exists(self, path):
         return os.path.exists(path)
